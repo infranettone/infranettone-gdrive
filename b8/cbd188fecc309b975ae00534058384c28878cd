@@ -1,0 +1,27 @@
+Cargo.toml
+  s_c7e4e25cf97532::t_a1c78271384d87 4-8,11
+README.md
+  s_c7e4e25cf97532::t_716ff70c6bd615 105-121
+gdrive-ui/README.md
+  s_c7e4e25cf97532::t_716ff70c6bd615 49-51
+gdrive-ui/src-tauri/Cargo.toml
+  s_c7e4e25cf97532::t_a1c78271384d87 3
+.github/workflows/release.yaml
+  s_c7e4e25cf97532::t_dd295c5addb56f 1-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b8cbd188fecc309b975ae00534058384c28878cd",
+  "prompts": {},
+  "sessions": {
+    "s_c7e4e25cf97532": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "690cde26-c315-4303-9cab-82f2de644c34",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Raul Adamuz <radamuzc@gmail.com>"
+    }
+  }
+}
