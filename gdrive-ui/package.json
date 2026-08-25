@@ -1,7 +1,6 @@
 {
   "name": "gdrive-ui",
   "private": true,
-  "version": "3.9.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

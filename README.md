@@ -102,3 +102,20 @@ The app is available in English and Spanish.
 ### Building it yourself
 
 See [gdrive-ui/README.md](gdrive-ui/README.md).
+
+## Releasing
+
+Publishing is a version bump. There is exactly one place to change it:
+
+```toml
+# Cargo.toml
+[workspace.package]
+version = "3.9.2"
+```
+
+The CLI crate, the desktop app crate, `tauri.conf.json` and the bundle
+filenames all derive from it.
+
+Merge that to `main` and [`.github/workflows/release.yaml`](.github/workflows/release.yaml) does the rest: it tags `v<version>`, opens a draft release, builds every artifact in parallel, uploads them, and publishes the release once they have all succeeded. If the tag already exists the workflow stops immediately, so ordinary pushes to `main` cost nothing.
+
+The release is only undrafted when every platform succeeded, so a half-built release is never visible.

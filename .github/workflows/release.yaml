@@ -1,0 +1,229 @@
+name: Release
+
+# Publishing is a version bump: set [workspace.package] version in the root
+# Cargo.toml and merge to main. This tags v<version>, builds every artifact
+# and publishes the release. If the tag already exists it does nothing, so
+# ordinary pushes to main are a no-op.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  prepare:
+    name: Check version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+      should_release: ${{ steps.check.outputs.should_release }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        run: |
+          version="$(sed -n '/^\[workspace\.package\]/,/^\[/p' Cargo.toml \
+            | sed -n 's/^version = "\(.*\)"$/\1/p' | head -1)"
+
+          if [ -z "$version" ]; then
+            echo "Could not read the version from [workspace.package] in Cargo.toml" >&2
+            exit 1
+          fi
+
+          tag="v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$tag already exists, nothing to release."
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Releasing $tag."
+          fi
+
+  create-release:
+    name: Create draft release
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.release_id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Created as a draft so the release only becomes visible once every
+      # platform has uploaded successfully.
+      - id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          gh release create "$TAG" \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --generate-notes
+
+          release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id)"
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
+  cli:
+    name: CLI (${{ matrix.label }})
+    needs: [prepare, create-release]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux x64
+            archive: gdrive_linux-x64.tar.gz
+          - os: macos-latest
+            label: macOS x64
+            archive: gdrive_macos-x64.tar.gz
+          - os: windows-latest
+            label: Windows x64
+            archive: gdrive_windows-x64.zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.os != 'ubuntu-latest'
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'x86_64-apple-darwin' || '' }}
+
+      # `-p gdrive` keeps this to the CLI: the workspace also holds the
+      # desktop app, which the `desktop` job builds instead.
+      - name: Build (Linux, static musl)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          docker run --rm -t \
+            -v "$HOME/.cargo/registry/:/root/.cargo/registry" \
+            -v "$(pwd)":/volume \
+            clux/muslrust:stable cargo build --release -p gdrive
+          tar -czf "${{ matrix.archive }}" -C target/x86_64-unknown-linux-musl/release gdrive
+
+      - name: Build (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cargo build --release -p gdrive --target x86_64-apple-darwin
+          tar -czf "${{ matrix.archive }}" -C target/x86_64-apple-darwin/release gdrive
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          cargo build --release -p gdrive
+          7z a -tzip "${{ matrix.archive }}" ./target/release/gdrive.exe
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: gh release upload "${{ needs.prepare.outputs.tag }}" "${{ matrix.archive }}" --clobber
+
+  desktop:
+    name: Desktop app (${{ matrix.label }})
+    needs: [prepare, create-release]
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # AppImage, .deb and .rpm. Built on 22.04 so the glibc floor stays low.
+          - platform: ubuntu-22.04
+            label: Linux x64
+            args: ""
+            target: ""
+          - platform: macos-14
+            label: macOS arm64
+            args: "--target aarch64-apple-darwin"
+            target: aarch64-apple-darwin
+          - platform: macos-13
+            label: macOS x64
+            args: "--target x86_64-apple-darwin"
+            target: x86_64-apple-darwin
+          # .msi and an NSIS .exe installer.
+          - platform: windows-latest
+            label: Windows x64
+            args: ""
+            target: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: gdrive-ui/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            libxdo-dev
+
+      - name: Install frontend dependencies
+        working-directory: gdrive-ui
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # All optional. Without them the bundles are simply unsigned, the
+          # same as the CLI binaries.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: gdrive-ui
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: ${{ matrix.args }}
+
+  publish:
+    name: Publish release
+    needs: [prepare, create-release, cli, desktop]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Undraft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ needs.prepare.outputs.tag }}" --draft=false --latest
+          echo "::notice::Published ${{ needs.prepare.outputs.tag }}."

@@ -1,6 +1,6 @@
 [package]
 name = "gdrive-ui"
-version = "3.9.1"
+version.workspace = true
 edition = "2021"
 description = "Desktop app for gdrive"
 default-run = "gdrive-ui"
