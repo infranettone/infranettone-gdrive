@@ -5,6 +5,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fs;
 use std::io;
+use std::path::Path;
 use std::path::PathBuf;
 
 const SYSTEM_CONFIG_DIR_NAME: &str = ".config";
@@ -250,12 +251,18 @@ pub fn looks_like_client_id(value: &str) -> bool {
         && value.ends_with(".apps.googleusercontent.com")
 }
 
-pub fn set_file_permissions(path: &PathBuf) -> Result<(), io::Error> {
+pub fn set_file_permissions(path: &Path) -> Result<(), io::Error> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
     }
+
+    // Windows has no equivalent mode bits — the file inherits the ACL of the
+    // user's profile directory. Bind the argument so it isn't reported as
+    // unused once the block above is compiled out.
+    #[cfg(not(unix))]
+    let _ = path;
 
     Ok(())
 }
