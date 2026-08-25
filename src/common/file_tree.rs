@@ -7,6 +7,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fs;
 use std::io;
+use std::path::Path;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -15,10 +16,10 @@ pub struct FileTree {
 }
 
 impl FileTree {
-    pub async fn from_path<'a>(path: &PathBuf, ids: &mut IdGen<'a>) -> Result<FileTree, Error> {
+    pub async fn from_path<'a>(path: &Path, ids: &mut IdGen<'a>) -> Result<FileTree, Error> {
         let canonical_path = path
             .canonicalize()
-            .map_err(|err| Error::CanonicalizePath(path.clone(), err))?;
+            .map_err(|err| Error::CanonicalizePath(path.to_path_buf(), err))?;
 
         let root = Folder::from_path(&canonical_path, None, ids).await?;
         Ok(FileTree { root })
@@ -118,7 +119,12 @@ impl Folder {
             let entry = e.map_err(Error::ReadDirEntry)?;
             let path = entry.path();
 
-            if path.is_dir() {
+            // `is_symlink` has to come first: `is_dir` and `is_file` follow
+            // links, so a symlink would otherwise be reported as its target
+            // and `Error::IsSymlink` could never be reached.
+            if path.is_symlink() {
+                return Err(Error::IsSymlink(path.clone()));
+            } else if path.is_dir() {
                 let folder = Folder::from_path(&path, Some(&folder), ids).await?;
                 let node = Node::FolderNode(folder);
                 children.push(node);
@@ -126,8 +132,6 @@ impl Folder {
                 let file = File::from_path(&path, &folder, ids).await?;
                 let node = Node::FileNode(file);
                 children.push(node);
-            } else if path.is_file() {
-                return Err(Error::IsSymlink(path.clone()));
             } else {
                 return Err(Error::UnknownFileType(path.clone()));
             }
@@ -159,7 +163,7 @@ impl Folder {
     }
 
     pub fn folders_recursive(&self) -> Vec<Folder> {
-        Folder::collect_folders_recursive(&self)
+        Folder::collect_folders_recursive(self)
     }
 
     pub fn ancestor_count(&self) -> usize {

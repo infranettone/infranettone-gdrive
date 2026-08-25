@@ -73,7 +73,7 @@ pub async fn export_file(
 ) -> Result<hyper::Body, google_drive3::Error> {
     let response = hub
         .files()
-        .export(file_id, &mime_type.to_string())
+        .export(file_id, mime_type.as_ref())
         .add_scope(google_drive3::api::Scope::Full)
         .doit()
         .await?;

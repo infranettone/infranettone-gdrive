@@ -4,6 +4,9 @@ on:
   release:
     types: [created]
 
+permissions:
+  contents: write
+
 env:
   APP_NAME: gdrive
   ARCHIVE_NAME: gdrive_macos-x64.tar.gz
@@ -14,24 +17,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Prepare upload url
-        run: |
-          UPLOAD_URL="$(jq -r '.release.upload_url' "$GITHUB_EVENT_PATH" | sed -e "s/{?name,label}$/?name=${ARCHIVE_NAME}/")"
-          echo "UPLOAD_URL=$UPLOAD_URL" >> $GITHUB_ENV
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
 
+      # `-p gdrive` keeps this to the CLI: the workspace also holds the desktop
+      # app, which is released by release_ui.yaml instead.
       - name: Build application
         run: |
-          cargo build --release
-          tar -czf $ARCHIVE_NAME -C target/release $APP_NAME
+          cargo build --release -p gdrive --target x86_64-apple-darwin
+          tar -czf $ARCHIVE_NAME -C target/x86_64-apple-darwin/release $APP_NAME
 
       - name: Upload release asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ env.UPLOAD_URL }}
-          asset_path: ${{ env.ARCHIVE_NAME }}
-          asset_name: ${{ env.ARCHIVE_NAME }}
-          asset_content_type: application/gzip
+          files: ${{ env.ARCHIVE_NAME }}

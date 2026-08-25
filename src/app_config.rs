@@ -114,7 +114,7 @@ impl AppConfig {
     }
 
     pub fn load_secret(&self) -> Result<Secret, Error> {
-        let content = fs::read_to_string(&self.secret_path()).map_err(Error::ReadSecret)?;
+        let content = fs::read_to_string(self.secret_path()).map_err(Error::ReadSecret)?;
         serde_json::from_str(&content).map_err(Error::DeserializeSecret)
     }
 
@@ -195,6 +195,61 @@ pub struct Secret {
     pub client_secret: String,
 }
 
+/// The shape of the `client_secret_*.json` file that Google Cloud Console
+/// offers for download after creating an OAuth client id.
+///
+/// Desktop clients are stored under `installed`, web clients under `web`. We
+/// accept both, plus a bare `{client_id, client_secret}` object so an already
+/// saved gdrive `secret.json` can be re-imported.
+#[derive(Debug, Deserialize)]
+struct GoogleCredentialsFile {
+    installed: Option<Secret>,
+    web: Option<Secret>,
+    client_id: Option<String>,
+    client_secret: Option<String>,
+}
+
+/// Parse the credentials json downloaded from Google Cloud Console.
+pub fn parse_google_credentials_json(content: &str) -> Result<Secret, Error> {
+    let parsed: GoogleCredentialsFile =
+        serde_json::from_str(content).map_err(Error::DeserializeSecret)?;
+
+    let secret = parsed
+        .installed
+        .or(parsed.web)
+        .or(match (parsed.client_id, parsed.client_secret) {
+            (Some(client_id), Some(client_secret)) => Some(Secret {
+                client_id,
+                client_secret,
+            }),
+            _ => None,
+        })
+        .ok_or(Error::CredentialsFileUnrecognized)?;
+
+    if secret.client_id.trim().is_empty() || secret.client_secret.trim().is_empty() {
+        return Err(Error::CredentialsFileUnrecognized);
+    }
+
+    Ok(secret)
+}
+
+/// Whether a string looks like a Google OAuth client id.
+///
+/// Used by the desktop wizard to catch paste mistakes before starting a flow
+/// that would fail several steps later with an opaque `invalid_client`.
+pub fn looks_like_client_id(value: &str) -> bool {
+    let value = value.trim();
+
+    let Some((project_number, rest)) = value.split_once('-') else {
+        return false;
+    };
+
+    !project_number.is_empty()
+        && project_number.chars().all(|c| c.is_ascii_digit())
+        && !rest.is_empty()
+        && value.ends_with(".apps.googleusercontent.com")
+}
+
 pub fn set_file_permissions(path: &PathBuf) -> Result<(), io::Error> {
     #[cfg(unix)]
     {
@@ -224,6 +279,7 @@ pub enum Error {
     RemoveAccountDir(io::Error),
     RemoveAccountConfig(io::Error),
     CreateBaseDir(PathBuf, io::Error),
+    CredentialsFileUnrecognized,
 }
 
 impl error::Error for Error {}
@@ -322,6 +378,78 @@ impl Display for Error {
                     err
                 )
             }
+
+            Error::CredentialsFileUnrecognized => {
+                // fmt
+                write!(
+                    f,
+                    "The file does not look like a Google OAuth credentials file, it should contain a client_id and a client_secret"
+                )
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_desktop_client_file() {
+        let content = r#"{
+            "installed": {
+                "client_id": "123-abc.apps.googleusercontent.com",
+                "project_id": "my-project",
+                "client_secret": "GOCSPX-secret",
+                "redirect_uris": ["http://localhost"]
+            }
+        }"#;
+
+        let secret = parse_google_credentials_json(content).unwrap();
+        assert_eq!(secret.client_id, "123-abc.apps.googleusercontent.com");
+        assert_eq!(secret.client_secret, "GOCSPX-secret");
+    }
+
+    #[test]
+    fn parses_web_client_file() {
+        let content =
+            r#"{"web": {"client_id": "1-a.apps.googleusercontent.com", "client_secret": "s"}}"#;
+        assert_eq!(
+            parse_google_credentials_json(content)
+                .unwrap()
+                .client_secret,
+            "s"
+        );
+    }
+
+    #[test]
+    fn parses_bare_gdrive_secret_file() {
+        let content = r#"{"client_id": "1-a.apps.googleusercontent.com", "client_secret": "s"}"#;
+        assert_eq!(
+            parse_google_credentials_json(content).unwrap().client_id,
+            "1-a.apps.googleusercontent.com"
+        );
+    }
+
+    #[test]
+    fn rejects_unrelated_and_invalid_json() {
+        assert!(parse_google_credentials_json("not json").is_err());
+        assert!(parse_google_credentials_json(r#"{"foo": 1}"#).is_err());
+        assert!(parse_google_credentials_json(
+            r#"{"installed": {"client_id": "", "client_secret": ""}}"#
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn recognizes_client_ids() {
+        assert!(looks_like_client_id(
+            "123456789012-abcdefg1234.apps.googleusercontent.com"
+        ));
+        assert!(looks_like_client_id("  123-a.apps.googleusercontent.com  "));
+        assert!(!looks_like_client_id("GOCSPX-some-secret"));
+        assert!(!looks_like_client_id("abc-def.apps.googleusercontent.com"));
+        assert!(!looks_like_client_id("123-abc"));
+        assert!(!looks_like_client_id(""));
     }
 }

@@ -1,6 +1,6 @@
 use mime::Mime;
 use std::fmt;
-use std::path::PathBuf;
+use std::path::Path;
 
 pub const MIME_TYPE_DRIVE_FOLDER: &str = "application/vnd.google-apps.folder";
 pub const MIME_TYPE_DRIVE_DOCUMENT: &str = "application/vnd.google-apps.document";
@@ -82,7 +82,7 @@ impl DocType {
         (FileExtension::Odp, DocType::Presentation),
     ];
 
-    pub fn from_file_path(path: &PathBuf) -> Option<DocType> {
+    pub fn from_file_path(path: &Path) -> Option<DocType> {
         let extension = FileExtension::from_path(path)?;
 
         Self::IMPORT_EXTENSION_MAP
@@ -224,7 +224,7 @@ impl fmt::Display for FileExtension {
 }
 
 impl FileExtension {
-    pub fn from_path(path: &PathBuf) -> Option<FileExtension> {
+    pub fn from_path(path: &Path) -> Option<FileExtension> {
         let extension = path.extension()?.to_str()?;
 
         match extension {
@@ -283,7 +283,7 @@ pub fn is_directory(file: &google_drive3::api::File) -> bool {
 }
 
 pub fn is_binary(file: &google_drive3::api::File) -> bool {
-    file.md5_checksum != None
+    file.md5_checksum.is_some()
 }
 
 pub fn is_shortcut(file: &google_drive3::api::File) -> bool {

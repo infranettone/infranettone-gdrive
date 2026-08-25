@@ -31,7 +31,7 @@ pub async fn revoke(config: Config) -> Result<(), Error> {
     let delete_list = config.action.get_matching_permissions(permissions)?;
 
     for permission in delete_list {
-        if let Err(_) = print_revoke_details(&file, &permission) {
+        if print_revoke_details(&file, &permission).is_err() {
             println!(
                 "Revoking permission with id: '{}'",
                 permission.id.clone().unwrap_or_default()
@@ -45,7 +45,7 @@ pub async fn revoke(config: Config) -> Result<(), Error> {
             &permission.id.clone().unwrap_or_default(),
         )
         .await
-        .map_err(|err| Error::DeletePermission(permission.clone(), err))?;
+        .map_err(|err| Error::DeletePermission(Box::new(permission.clone()), err))?;
     }
 
     Ok(())
@@ -60,7 +60,7 @@ pub async fn delete_permission(
     let mut delegate = UploadDelegate::new(delegate_config);
 
     hub.permissions()
-        .delete(file_id, &permission_id)
+        .delete(file_id, permission_id)
         .param(
             "fields",
             "id,role,type,domain,emailAddress,allowFileDiscovery",
@@ -79,7 +79,7 @@ pub enum Error {
     Hub(hub_helper::Error),
     GetFile(google_drive3::Error),
     ListPermissions(google_drive3::Error),
-    DeletePermission(google_drive3::api::Permission, google_drive3::Error),
+    DeletePermission(Box<google_drive3::api::Permission>, google_drive3::Error),
     PermissionNotFound(String),
     UnknownPermissionType(String),
     UnknownPermissionRole(String),
@@ -161,8 +161,8 @@ impl RevokeAction {
     ) -> Vec<google_drive3::api::Permission> {
         permissions
             .iter()
+            .filter(|&p| p.type_ == Some(type_.to_string()))
             .cloned()
-            .filter(|p| p.type_ == Some(type_.to_string()))
             .collect()
     }
 
@@ -172,8 +172,8 @@ impl RevokeAction {
     ) -> Vec<google_drive3::api::Permission> {
         permissions
             .iter()
+            .filter(|&p| p.role != Some(role.to_string()))
             .cloned()
-            .filter(|p| p.role != Some(role.to_string()))
             .collect()
     }
 
@@ -183,8 +183,8 @@ impl RevokeAction {
     ) -> Option<google_drive3::api::Permission> {
         permissions
             .iter()
+            .find(|&p| p.id == Some(id.to_string()))
             .cloned()
-            .find(|p| p.id == Some(id.to_string()))
     }
 }
 

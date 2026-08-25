@@ -1,18 +1,14 @@
-pub mod about;
-pub mod account;
-pub mod app_config;
-pub mod common;
-pub mod drives;
-pub mod files;
-pub mod hub;
-pub mod permissions;
-pub mod version;
-
 use clap::{Parser, Subcommand};
-use common::delegate::ChunkSize;
-use common::permission;
-use files::list::ListQuery;
-use files::list::ListSortOrder;
+use gdrive::about;
+use gdrive::account;
+use gdrive::common::delegate::ChunkSize;
+use gdrive::common::permission;
+use gdrive::drives;
+use gdrive::files;
+use gdrive::files::list::ListQuery;
+use gdrive::files::list::ListSortOrder;
+use gdrive::permissions;
+use gdrive::version;
 use mime::Mime;
 use std::error::Error;
 use std::path::PathBuf;

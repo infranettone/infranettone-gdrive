@@ -107,7 +107,7 @@ pub async fn download_regular(
     file: &google_drive3::api::File,
     config: &Config,
 ) -> Result<(), Error> {
-    let body = download_file(&hub, &config.file_id)
+    let body = download_file(hub, &config.file_id)
         .await
         .map_err(Error::DownloadFile)?;
 
@@ -136,7 +136,7 @@ pub async fn download_directory(
     file: &google_drive3::api::File,
     config: &Config,
 ) -> Result<(), Error> {
-    let tree = FileTreeDrive::from_file(&hub, &file)
+    let tree = FileTreeDrive::from_file(hub, file)
         .await
         .map_err(Error::CreateFileTree)?;
 
@@ -167,7 +167,7 @@ pub async fn download_directory(
                 continue;
             }
 
-            let body = download_file(&hub, &file.drive_id)
+            let body = download_file(hub, &file.drive_id)
                 .await
                 .map_err(Error::DownloadFile)?;
 
@@ -315,7 +315,7 @@ pub async fn save_body_to_file(
     err_if_md5_mismatch(expected_md5, writer.md5())?;
 
     // Rename temporary file to final file
-    fs::rename(&tmp_file_path, &file_path).map_err(Error::RenameFile)
+    fs::rename(&tmp_file_path, file_path).map_err(Error::RenameFile)
 }
 
 // TODO: move to common

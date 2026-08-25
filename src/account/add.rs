@@ -5,29 +5,34 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io;
 use std::io::Write;
+use std::path::PathBuf;
+use std::sync::Arc;
 
-pub async fn add() -> Result<(), Error> {
-    println!("To add an account you need a Google Client ID and Client Secret.");
-    println!("Instructions for how to create credentials can be found here: https://github.com/glotlabs/gdrive/blob/main/docs/create_google_api_credentials.md");
-    println!("Note that if you are using gdrive on a remote server you should read this first: https://github.com/glotlabs/gdrive#using-gdrive-on-a-remote-server");
-    println!();
+/// The result of successfully adding an account.
+#[derive(Debug, Clone)]
+pub struct AddedAccount {
+    pub email: String,
+    pub base_path: PathBuf,
+}
 
-    let secret = secret_prompt().map_err(Error::Prompt)?;
-
+/// Add an account from an already known secret, reporting the consent url
+/// through `presenter` instead of stdout.
+///
+/// This is the shared core used both by the interactive CLI prompt below and
+/// by the desktop UI.
+pub async fn add_with_secret(
+    secret: app_config::Secret,
+    presenter: hub::UrlPresenter,
+) -> Result<AddedAccount, Error> {
     let tmp_dir = tempfile::tempdir().map_err(Error::Tempdir)?;
     let tokens_path = tmp_dir.path().join("tokens.json");
 
-    let auth = hub::Auth::new(&secret, &tokens_path)
+    let auth = hub::Auth::new_with_presenter(&secret, &tokens_path, presenter)
         .await
         .map_err(Error::Auth)?;
 
     // Get access tokens
-    auth.token(&[
-        "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/drive.metadata.readonly",
-    ])
-    .await
-    .map_err(Error::AccessToken)?;
+    auth.token(&hub::SCOPES).await.map_err(Error::AccessToken)?;
 
     let hub = hub::Hub::new(auth).await;
     let (_, about) = hub
@@ -46,16 +51,33 @@ pub async fn add() -> Result<(), Error> {
     let app_cfg =
         app_config::add_account(&email, &secret, &tokens_path).map_err(Error::AppConfig)?;
 
+    app_config::switch_account(&app_cfg).map_err(Error::AppConfig)?;
+
+    Ok(AddedAccount {
+        email: app_cfg.account.name.clone(),
+        base_path: app_cfg.base_path,
+    })
+}
+
+pub async fn add() -> Result<(), Error> {
+    println!("To add an account you need a Google Client ID and Client Secret.");
+    println!("Instructions for how to create credentials can be found here: https://github.com/glotlabs/gdrive/blob/main/docs/create_google_api_credentials.md");
+    println!("Note that if you are using gdrive on a remote server you should read this first: https://github.com/glotlabs/gdrive#using-gdrive-on-a-remote-server");
+    println!();
+
+    let secret = secret_prompt().map_err(Error::Prompt)?;
+
+    let account = add_with_secret(secret, Arc::new(hub::print_user_url)).await?;
+
     println!();
     println!(
         "Saved account credentials in {}",
-        app_cfg.base_path.display()
+        account.base_path.display()
     );
     println!("Keep them safe! If someone gets access to them, they will also be able to access your Google Drive.");
 
-    app_config::switch_account(&app_cfg).map_err(Error::AppConfig)?;
     println!();
-    println!("Logged in as {}", app_cfg.account.name);
+    println!("Logged in as {}", account.email);
 
     Ok(())
 }

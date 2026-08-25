@@ -2,9 +2,9 @@ use crate::common::delegate::BackoffConfig;
 use crate::common::delegate::ChunkSize;
 use crate::common::delegate::UploadDelegate;
 use crate::common::delegate::UploadDelegateConfig;
+use crate::common::file_helper;
 use crate::common::file_info;
 use crate::common::file_info::FileInfo;
-use crate::common::file_helper;
 use crate::common::hub_helper;
 use crate::files;
 use crate::files::info;
@@ -41,9 +41,12 @@ pub async fn update(config: Config) -> Result<(), Error> {
         print_chunk_info: config.print_chunk_info,
     };
 
-    let (file, file_path) = file_helper::open_file(&config.file_path)
-        .map_err(|err| Error::OpenFile(
-            config.file_path.unwrap_or_else(|| PathBuf::from("<stdin>")), err))?;
+    let (file, file_path) = file_helper::open_file(&config.file_path).map_err(|err| {
+        Error::OpenFile(
+            config.file_path.unwrap_or_else(|| PathBuf::from("<stdin>")),
+            err,
+        )
+    })?;
 
     let drive_file = info::get_file(&hub, &config.file_id)
         .await
@@ -61,11 +64,7 @@ pub async fn update(config: Config) -> Result<(), Error> {
 
     let reader = std::io::BufReader::new(file);
 
-    println!(
-        "Updating {} with {}",
-        config.file_id,
-        file_path.display()
-    );
+    println!("Updating {} with {}", config.file_id, file_path.display());
 
     let file = update_file(&hub, reader, &config.file_id, file_info, delegate_config)
         .await
@@ -98,7 +97,7 @@ where
 
     let req = hub
         .files()
-        .update(dst_file, &file_id)
+        .update(dst_file, file_id)
         .param("fields", "id,name,size,createdTime,modifiedTime,md5Checksum,mimeType,parents,shared,description,webContentLink,webViewLink")
         .add_scope(google_drive3::api::Scope::Full)
         .delegate(&mut delegate)
