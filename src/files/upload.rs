@@ -2,11 +2,11 @@ use crate::common::delegate::BackoffConfig;
 use crate::common::delegate::ChunkSize;
 use crate::common::delegate::UploadDelegate;
 use crate::common::delegate::UploadDelegateConfig;
+use crate::common::file_helper;
 use crate::common::file_info;
 use crate::common::file_info::FileInfo;
 use crate::common::file_tree;
 use crate::common::file_tree::FileTree;
-use crate::common::file_helper;
 use crate::common::hub_helper;
 use crate::common::id_gen::IdGen;
 use crate::files;
@@ -20,6 +20,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fs;
 use std::io;
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -50,22 +51,27 @@ pub async fn upload(config: Config) -> Result<(), Error> {
 
     match &config.file_path {
         Some(path) => {
-            err_if_directory(&path, &config)?;
+            err_if_directory(path, &config)?;
 
             if path.is_dir() {
                 upload_directory(&hub, &config, delegate_config).await?;
             } else {
                 upload_regular(&hub, &config, delegate_config).await?;
             }
-        },
+        }
         None => {
             let tmp_file = file_helper::stdin_to_file()
                 .map_err(|err| Error::OpenFile(PathBuf::from("<stdin>"), err))?;
 
-            upload_regular(&hub, &Config {
-                file_path: Some(tmp_file.as_ref().to_path_buf()),
-                ..config
-            }, delegate_config).await?;
+            upload_regular(
+                &hub,
+                &Config {
+                    file_path: Some(tmp_file.as_ref().to_path_buf()),
+                    ..config
+                },
+                delegate_config,
+            )
+            .await?;
         }
     };
 
@@ -78,8 +84,7 @@ pub async fn upload_regular(
     delegate_config: UploadDelegateConfig,
 ) -> Result<(), Error> {
     let file_path = config.file_path.as_ref().unwrap();
-    let file = fs::File::open(file_path)
-        .map_err(|err| Error::OpenFile(file_path.clone(), err))?;
+    let file = fs::File::open(file_path).map_err(|err| Error::OpenFile(file_path.clone(), err))?;
 
     let file_info = FileInfo::from_file(
         &file,
@@ -97,7 +102,7 @@ pub async fn upload_regular(
         println!("Uploading {}", file_path.display());
     }
 
-    let file = upload_file(&hub, reader, None, file_info, delegate_config)
+    let file = upload_file(hub, reader, None, file_info, delegate_config)
         .await
         .map_err(Error::Upload)?;
 
@@ -283,9 +288,9 @@ impl Display for Error {
     }
 }
 
-fn err_if_directory(path: &PathBuf, config: &Config) -> Result<(), Error> {
+fn err_if_directory(path: &Path, config: &Config) -> Result<(), Error> {
     if path.is_dir() && !config.upload_directories {
-        Err(Error::IsDirectory(path.clone()))
+        Err(Error::IsDirectory(path.to_path_buf()))
     } else {
         Ok(())
     }

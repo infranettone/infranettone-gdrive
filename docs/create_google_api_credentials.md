@@ -1,5 +1,7 @@
 # Create Google API credentials in 50 easy steps
 
+> **Using the desktop app?** Its "Add Google account" wizard walks you through everything below, opening each Google Cloud screen for you and filling in the credentials from the json file Google gives you at step 24. See [Desktop app](../README.md#desktop-app).
+
 Google has made it really easy to create api credentials for own use, just follow these few steps:
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)

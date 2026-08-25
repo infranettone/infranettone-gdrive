@@ -6,6 +6,8 @@
 
 gdrive is a command line application for interacting with Google Drive. This is the successor of [gdrive2](https://github.com/prasmussen/gdrive), though at the moment only the most basic functionality is implemented.
 
+There is also a **desktop app** that shares the same accounts and config as the CLI, and adds a guided wizard for the one genuinely fiddly part: creating your Google OAuth credentials. See [Desktop app](#desktop-app).
+
 ## Community
 
 Join our [discord server](https://discord.gg/5fyVwp8559) to discuss everything gdrive.
@@ -25,6 +27,8 @@ you will help support:
 ### Requirements
 
 - Google OAuth Client credentials, see [docs](/docs/create_google_api_credentials.md)
+
+  These are credentials you create yourself, in your own Google Cloud project — gdrive ships with none, so nobody else can reach your files and you don't share anyone's quota. Creating them takes about 5 minutes. If you'd rather be walked through it, the [desktop app](#desktop-app) opens each Google Cloud screen for you and fills the credentials in from the json file Google hands you.
 
 ### Install binary
 
@@ -60,3 +64,41 @@ For example on an AWS instance the api returns a lot of `429 Too Many Requests` 
 While the same file uploads without any errors from a Linode instance.
 Gdrive has retry logic built in for these errors, but it can slow down the upload significantly.
 To check if you are affected by these errors you can run the `upload` command with these flags: `--print-chunk-errors` `--print-chunk-info`.
+
+## Desktop app
+
+A cross-platform desktop app (Linux, macOS, Windows) built with [Tauri](https://tauri.app). It reads and writes the same `$HOME/.config/gdrive3/` that the CLI uses, so an account added in either one immediately works in the other.
+
+### Download
+
+Installers are attached to each [release](https://github.com/glotlabs/gdrive/releases):
+
+| Platform | Files |
+| --- | --- |
+| Linux x64 | `.AppImage`, `.deb`, `.rpm` |
+| macOS arm64 (Apple Silicon) | `.dmg` |
+| macOS x64 (Intel) | `.dmg` |
+| Windows x64 | `.msi`, `.exe` |
+
+Like the CLI binaries, these are **not code signed**. macOS Gatekeeper and Windows SmartScreen will warn on first launch; on macOS, right-click the app and choose *Open*.
+
+### The "Add Google account" wizard
+
+The app's main reason to exist. Instead of pointing you at a 28-step document, it walks through the [Requirements](#requirements) in six screens:
+
+1. **Create a Google Cloud project** — opens the project creator; you paste the Project ID back so every later link goes straight to the right screen.
+2. **Enable the Google Drive API** — one button, one click.
+3. **Configure the consent screen** — including a copy button for the two scopes gdrive needs, a reminder to add yourself as a test user, and a prominent warning to **Publish app** (otherwise Google expires your token after 7 days).
+4. **Create the OAuth client ID** — as type *Desktop app*, and download the json.
+5. **Enter your credentials** — drag the `client_secret_*.json` onto the window and both fields fill in, or paste them by hand. The Client ID format is validated, and port 8085 is checked before starting.
+6. **Authorize** — the consent url opens in your browser and is also shown with a copy button. Cancelling frees the port immediately.
+
+Failures come back with a remedy rather than a raw OAuth error: `invalid_client` points you back at step 4, `access_denied` at the test-user and publish settings in step 3, a busy port tells you to close the other gdrive instance.
+
+Progress through the Google Cloud steps is remembered if you close the app midway. Your client secret is never written to browser storage — only to `$HOME/.config/gdrive3/<account>/secret.json`, which is `chmod 0600` on unix.
+
+The app is available in English and Spanish.
+
+### Building it yourself
+
+See [gdrive-ui/README.md](gdrive-ui/README.md).

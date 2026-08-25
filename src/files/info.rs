@@ -102,7 +102,7 @@ pub fn prepare_fields(file: &google_drive3::api::File, config: &DisplayConfig) -
         },
         Field {
             name: String::from("Parents"),
-            value: file.parents.as_ref().map(format_list),
+            value: file.parents.as_deref().map(format_list),
         },
         Field {
             name: String::from("ViewUrl"),
@@ -120,7 +120,7 @@ pub fn format_bool(b: bool) -> String {
     }
 }
 
-pub fn format_list(list: &Vec<String>) -> String {
+pub fn format_list(list: &[String]) -> String {
     list.join(", ")
 }
 

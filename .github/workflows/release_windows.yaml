@@ -4,6 +4,9 @@ on:
   release:
     types: [created]
 
+permissions:
+  contents: write
+
 env:
   APP_NAME: gdrive
   ARCHIVE_NAME: gdrive_windows-x64.zip
@@ -14,29 +17,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Prepare upload url
-        run: |
-          UPLOAD_URL="$(jq -r '.release.upload_url' "$GITHUB_EVENT_PATH" | sed -e "s/{?name,label}$/?name=${ARCHIVE_NAME}/")"
-          echo "UPLOAD_URL=$UPLOAD_URL" >> $GITHUB_ENV
-        shell: bash
+      - uses: dtolnay/rust-toolchain@stable
 
+      # `-p gdrive` keeps this to the CLI: the workspace also holds the desktop
+      # app, which is released by release_ui.yaml instead.
       - name: Build application
         run: |
-          cargo build --release
+          cargo build --release -p gdrive
           cd target/release
-          ls
           7z a -tzip $ARCHIVE_NAME $APP_NAME.exe
           mv $ARCHIVE_NAME ../../
         shell: bash
 
       - name: Upload release asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ env.UPLOAD_URL }}
-          asset_path: ${{ env.ARCHIVE_NAME }}
-          asset_name: ${{ env.ARCHIVE_NAME }}
-          asset_content_type: application/zip
+          files: ${{ env.ARCHIVE_NAME }}

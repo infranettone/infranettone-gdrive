@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fs::File;
 use std::io;
+use std::path::Path;
 use std::path::PathBuf;
 
 pub fn create(src_path: &PathBuf, archive_path: &PathBuf) -> Result<(), Error> {
@@ -143,25 +144,25 @@ impl Display for Error {
     }
 }
 
-fn err_if_not_exists(path: &PathBuf) -> Result<(), Error> {
+fn err_if_not_exists(path: &Path) -> Result<(), Error> {
     if !path.exists() {
-        Err(Error::PathDoesNotExist(path.clone()))
+        Err(Error::PathDoesNotExist(path.to_path_buf()))
     } else {
         Ok(())
     }
 }
 
-fn err_if_not_dir(path: &PathBuf) -> Result<(), Error> {
+fn err_if_not_dir(path: &Path) -> Result<(), Error> {
     if !path.is_dir() {
-        Err(Error::PathNotDir(path.clone()))
+        Err(Error::PathNotDir(path.to_path_buf()))
     } else {
         Ok(())
     }
 }
 
-fn err_if_exists(path: &PathBuf) -> Result<(), Error> {
+fn err_if_exists(path: &Path) -> Result<(), Error> {
     if path.exists() {
-        Err(Error::PathAlreadyExists(path.clone()))
+        Err(Error::PathAlreadyExists(path.to_path_buf()))
     } else {
         Ok(())
     }

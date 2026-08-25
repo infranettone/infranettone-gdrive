@@ -5,23 +5,12 @@ use std::fmt::Display;
 use std::str::FromStr;
 use std::time::Duration;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct UploadDelegateConfig {
     pub chunk_size: ChunkSize,
     pub backoff_config: BackoffConfig,
     pub print_chunk_errors: bool,
     pub print_chunk_info: bool,
-}
-
-impl Default for UploadDelegateConfig {
-    fn default() -> Self {
-        UploadDelegateConfig {
-            chunk_size: ChunkSize::default(),
-            backoff_config: BackoffConfig::default(),
-            print_chunk_errors: false,
-            print_chunk_info: false,
-        }
-    }
 }
 
 pub struct UploadDelegate {

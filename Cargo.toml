@@ -1,9 +1,20 @@
+[workspace]
+members = [".", "gdrive-ui/src-tauri"]
+
 [package]
 name = "gdrive"
 version = "3.9.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "gdrive"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gdrive"
+path = "src/main.rs"
 
 [dependencies]
 async-recursion = "1.0.2"

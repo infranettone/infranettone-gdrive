@@ -244,7 +244,7 @@ fn format_file_name(config: &Config, file: &google_drive3::api::File) -> String 
 
     if config.truncate_name {
         file_name
-            .map(|s| truncate_middle(&s, 41))
+            .map(|s| truncate_middle(s, 41))
             .unwrap_or_default()
     } else {
         file_name.map(|s| s.to_string()).unwrap_or_default()
@@ -266,5 +266,5 @@ fn truncate_middle(s: &str, max_length: usize) -> String {
     let head: String = chars[0..head_count].iter().collect();
     let tail: String = chars[chars.len() - tail_count..].iter().collect();
 
-    vec![head, tail].join("…")
+    [head, tail].join("…")
 }
