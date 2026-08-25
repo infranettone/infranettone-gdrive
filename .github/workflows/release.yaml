@@ -2,8 +2,9 @@ name: Release
 
 # Publishing is a version bump: set [workspace.package] version in the root
 # Cargo.toml and merge to main. This tags v<version>, builds every artifact
-# and publishes the release. If the tag already exists it does nothing, so
-# ordinary pushes to main are a no-op.
+# and publishes the release. It does nothing once that version is published,
+# so ordinary pushes to main are a no-op — and a run that failed part way can
+# simply be re-run.
 on:
   push:
     branches: [main]
@@ -27,6 +28,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           version="$(sed -n '/^\[workspace\.package\]/,/^\[/p' Cargo.toml \
             | sed -n 's/^version = "\(.*\)"$/\1/p' | head -1)"
@@ -40,9 +43,17 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+          # The gate is a *published* release, not the tag: a run that failed
+          # half way leaves the tag and a draft behind, and re-running it has
+          # to be able to finish the job.
+          draft="$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || true)"
+
+          if [ "$draft" = "false" ]; then
             echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::$tag already exists, nothing to release."
+            echo "::notice::$tag is already published, nothing to release."
+          elif [ "$draft" = "true" ]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Resuming the unfinished draft release for $tag."
           else
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Releasing $tag."
@@ -60,19 +71,40 @@ jobs:
       - uses: actions/checkout@v4
 
       # Created as a draft so the release only becomes visible once every
-      # platform has uploaded successfully.
+      # platform has uploaded successfully. Every step is idempotent, so a
+      # re-run after a failed build picks up where it left off.
       - id: create
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
-          gh release create "$TAG" \
-            --draft \
-            --target "$GITHUB_SHA" \
-            --title "$TAG" \
-            --generate-notes
+          set -euo pipefail
 
-          release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id)"
+          # `gh release create --draft` does NOT create the tag — a draft has
+          # no tag until it is published — so create it ourselves first.
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
+          else
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$TAG"
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Draft release for $TAG already exists."
+          else
+            gh release create "$TAG" --draft --title "$TAG" --generate-notes
+          fi
+
+          # Drafts are invisible to `GET /releases/tags/{tag}`, so find the id
+          # by listing releases, which does include them.
+          release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+            --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -1)"
+
+          if [ -z "$release_id" ]; then
+            echo "Could not resolve the release id for $TAG" >&2
+            exit 1
+          fi
+
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
   cli:

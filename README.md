@@ -116,6 +116,6 @@ version = "3.9.2"
 The CLI crate, the desktop app crate, `tauri.conf.json` and the bundle
 filenames all derive from it.
 
-Merge that to `main` and [`.github/workflows/release.yaml`](.github/workflows/release.yaml) does the rest: it tags `v<version>`, opens a draft release, builds every artifact in parallel, uploads them, and publishes the release once they have all succeeded. If the tag already exists the workflow stops immediately, so ordinary pushes to `main` cost nothing.
+Merge that to `main` and [`.github/workflows/release.yaml`](.github/workflows/release.yaml) does the rest: it tags `v<version>`, opens a draft release, builds every artifact in parallel, uploads them, and publishes the release once they have all succeeded. The release is only undrafted when every platform succeeded, so a half-built release is never visible.
 
-The release is only undrafted when every platform succeeded, so a half-built release is never visible.
+The workflow skips as soon as it sees that version already published, so ordinary pushes to `main` cost one cheap job. If a build fails, the tag and the draft stay behind and re-running the workflow resumes from there.
