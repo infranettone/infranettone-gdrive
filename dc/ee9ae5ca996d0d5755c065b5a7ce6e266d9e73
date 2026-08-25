@@ -1,0 +1,21 @@
+src/app_config.rs
+  s_c7e4e25cf97532::t_53e2a696150583 254,261-265
+  s_c7e4e25cf97532::t_aca22184380421 8
+  s_c7e4e25cf97532::t_11533751fed8bd 266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "dcee9ae5ca996d0d5755c065b5a7ce6e266d9e73",
+  "prompts": {},
+  "sessions": {
+    "s_c7e4e25cf97532": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "690cde26-c315-4303-9cab-82f2de644c34",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Raul Adamuz <radamuzc@gmail.com>"
+    }
+  }
+}
