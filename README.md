@@ -80,7 +80,9 @@ Installers are attached to each [release](https://github.com/glotlabs/gdrive/rel
 | macOS x64 (Intel) | `.dmg` |
 | Windows x64 | `.msi`, `.exe` |
 
-Like the CLI binaries, these are **not code signed**. macOS Gatekeeper and Windows SmartScreen will warn on first launch; on macOS, right-click the app and choose *Open*.
+Both macOS builds are produced on Apple Silicon runners — GitHub has retired its Intel ones — with the x64 `.dmg` cross-compiled.
+
+Like the CLI binaries, these are **not code signed**. macOS Gatekeeper and Windows SmartScreen will warn on first launch; on macOS, right-click the app and choose *Open*. Signing is wired into the release workflow but inert: it only activates for the secrets that are actually set (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, and `TAURI_SIGNING_PRIVATE_KEY` for the updater).
 
 ### The "Add Google account" wizard
 

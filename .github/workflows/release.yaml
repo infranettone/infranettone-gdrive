@@ -176,11 +176,14 @@ jobs:
             label: Linux x64
             args: ""
             target: ""
+          # Both macOS builds run on Apple Silicon and the Intel one
+          # cross-compiles: GitHub has retired its Intel (macos-13) runners, so
+          # a job asking for one waits forever.
           - platform: macos-14
             label: macOS arm64
             args: "--target aarch64-apple-darwin"
             target: aarch64-apple-darwin
-          - platform: macos-13
+          - platform: macos-14
             label: macOS x64
             args: "--target x86_64-apple-darwin"
             target: x86_64-apple-darwin
@@ -227,11 +230,13 @@ jobs:
         working-directory: gdrive-ui
         run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
+      # Signing is optional, but it cannot be wired straight into the env
+      # below: an unset secret expands to an empty string and the variable is
+      # still *defined*, which makes Tauri try to import an empty certificate
+      # and fail. So only promote the ones that actually have a value.
+      - name: Configure optional code signing
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # All optional. Without them the bundles are simply unsigned, the
-          # same as the CLI binaries.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -240,6 +245,37 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          for name in \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID \
+            TAURI_SIGNING_PRIVATE_KEY \
+            TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              # Delimiter form, so a multi-line secret (a PEM key, a wrapped
+              # base64 blob) survives intact.
+              {
+                echo "$name<<__GDRIVE_SECRET_EOF__"
+                echo "$value"
+                echo "__GDRIVE_SECRET_EOF__"
+              } >> "$GITHUB_ENV"
+              echo "$name is set."
+            fi
+          done
+
+          if [ -z "${APPLE_CERTIFICATE}" ]; then
+            echo "::notice::No Apple signing secrets configured; the bundle will be unsigned."
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: gdrive-ui
           releaseId: ${{ needs.create-release.outputs.release_id }}
