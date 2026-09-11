@@ -286,6 +286,26 @@ enum FileCommand {
         recursive: bool,
     },
 
+    /// Move a file to the trash. Unlike delete, Drive keeps it for 30 days and untrash restores it
+    Trash {
+        /// File id
+        file_id: String,
+
+        /// Print the file as json
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Restore a file from the trash
+    Untrash {
+        /// File id
+        file_id: String,
+
+        /// Print the file as json
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Create directory
     Mkdir {
         /// Name
@@ -750,6 +770,22 @@ async fn main() {
                     .await
                     .unwrap_or_else(handle_error_with_code)
                 }
+
+                FileCommand::Trash { file_id, json } => files::trash(files::trash::Config {
+                    file_id,
+                    trashed: true,
+                    json,
+                })
+                .await
+                .unwrap_or_else(handle_error_with_code),
+
+                FileCommand::Untrash { file_id, json } => files::trash(files::trash::Config {
+                    file_id,
+                    trashed: false,
+                    json,
+                })
+                .await
+                .unwrap_or_else(handle_error_with_code),
 
                 FileCommand::Mkdir {
                     name,

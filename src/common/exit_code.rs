@@ -148,6 +148,15 @@ impl ExitCode for files::delete::Error {
     }
 }
 
+impl ExitCode for files::trash::Error {
+    fn exit_code(&self) -> i32 {
+        match self {
+            Self::Hub(err) => err.exit_code(),
+            Self::Update(err) => for_drive_error(err),
+        }
+    }
+}
+
 impl ExitCode for files::mkdir::Error {
     fn exit_code(&self) -> i32 {
         match self {
