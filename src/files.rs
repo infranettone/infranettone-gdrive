@@ -9,6 +9,7 @@ pub mod list;
 pub mod mkdir;
 pub mod mv;
 pub mod rename;
+pub mod trash;
 pub mod update;
 pub mod upload;
 
@@ -23,5 +24,6 @@ pub use list::list;
 pub use mkdir::mkdir;
 pub use mv::mv;
 pub use rename::rename;
+pub use trash::trash;
 pub use update::update;
 pub use upload::upload;

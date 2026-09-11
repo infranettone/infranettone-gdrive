@@ -72,7 +72,7 @@ These options make gdrive safe to drive from another program, such as the [KeePa
 
 ### Json output
 
-`files info`, `files list`, `files upload`, `files update`, `files mkdir`, `files revisions list|keep` and `files changes list|start-token` accept `--json`. Files always include `md5Checksum`, `headRevisionId`, `version`, `trashed`, `appProperties` and `lastModifyingUser`; times are RFC 3339 in UTC.
+`files info`, `files list`, `files upload`, `files update`, `files mkdir`, `files trash|untrash`, `files revisions list|keep` and `files changes list|start-token` accept `--json`. Files always include `md5Checksum`, `headRevisionId`, `version`, `trashed`, `appProperties` and `lastModifyingUser`; times are RFC 3339 in UTC.
 
 ```sh
 gdrive files info <FILE_ID> --json
@@ -107,9 +107,18 @@ gdrive files changes list <PAGE_TOKEN> --json
 
 `changes list` returns `newStartPageToken` once it has caught up (store it for the next call), or `nextPageToken` when `--max` stopped it early.
 
+### Trash
+
+```sh
+gdrive files trash <FILE_ID>
+gdrive files untrash <FILE_ID>
+```
+
+Unlike `files delete`, which removes a file for good, a trashed file stays in Drive's trash for 30 days and `files untrash` brings it back. `files info` reports `trashed` for it.
+
 ### Exit codes
 
-`files info|list|download|upload|update|delete|mkdir`, `files revisions` and `files changes` exit with:
+`files info|list|download|upload|update|delete|trash|untrash|mkdir`, `files revisions` and `files changes` exit with:
 
 | Code | Meaning |
 |---|---|
