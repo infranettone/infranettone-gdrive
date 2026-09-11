@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 gdrive = { path = "../.." }
 google-drive3 = { git = "https://github.com/prasmussen/google-apis-rs", branch = "resumable-fix" }
+home = "0.5.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }

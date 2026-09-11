@@ -1,3 +1,6 @@
 /target
 notes.txt
 *.tar
+
+# The CLI sidecar, built into the desktop bundle. See gdrive-ui/README.md.
+/gdrive-ui/src-tauri/binaries/

@@ -11,7 +11,7 @@ gdrive-ui/
   src/               frontend
     lib/api.ts       typed wrappers around invoke() and the oauth:// events
     lib/i18n.ts      every user-visible string, in English and Spanish
-    routes/          Accounts, Files, Drives, Permissions
+    routes/          Accounts, Files, Drives, Permissions, Cli
     wizard/          the guided "Add Google account" flow
   src-tauri/         Rust backend
     src/commands/    one module per CLI noun
@@ -32,17 +32,32 @@ gdrive-ui/
 
   (`4.1`, not `4.0` — Tauri v2 requires it.) macOS and Windows need nothing beyond Xcode command line tools / MSVC build tools.
 
+## The CLI sidecar
+
+The bundle ships the `gdrive` CLI alongside the app, declared as `bundle.externalBin` in `tauri.conf.json`. Tauri resolves that entry by appending the host's target triple, and `tauri-build` **refuses to compile** when the file is missing — so build it once before anything else:
+
+```sh
+npm run sidecar                          # host triple
+npm run sidecar -- aarch64-apple-darwin  # or a specific one, for a cross build
+```
+
+It lands in `src-tauri/binaries/`, which is gitignored.
+
+Shipping the binary is not the same as installing it: the bundler puts it next to the app executable, which is on the PATH for the `.deb` and `.rpm` and nowhere near it for an AppImage, a `.app` or an `.msi`. So the Terminal screen copies it into a per-user bin directory (`~/.local/bin`, or `%LOCALAPPDATA%\Programs\gdrive\bin`) — never with elevation, and it only ever removes its own copy.
+
 ## Develop
 
 ```sh
 cd gdrive-ui
 npm install
+npm run sidecar
 npm run tauri dev
 ```
 
 ## Build installers
 
 ```sh
+npm run sidecar
 npm run tauri build
 ```
 
@@ -53,6 +68,7 @@ The app's version is not set here: `src-tauri/Cargo.toml` inherits it from `[wor
 ## Checks
 
 ```sh
+npm run sidecar            # required: tauri-build validates the externalBin
 npm run typecheck          # frontend
 npm run build              # frontend; also required before the Rust build,
                            # because generate_context! reads dist/

@@ -149,6 +149,24 @@ export const filesExport = (
 export const filesImport = (filePath: string, parents?: string[]) =>
   invoke<void>("files_import", { filePath, parents });
 
+// --- the bundled CLI ------------------------------------------------------
+
+/** Mirrors `CliStatus` in src-tauri/src/commands/cli.rs. */
+export interface CliStatus {
+  bundled: boolean;
+  targetDir: string;
+  targetPath: string;
+  onPath: boolean;
+  resolved: string | null;
+  installed: boolean;
+  userCopy: boolean;
+  version: string | null;
+}
+
+export const cliStatus = () => invoke<CliStatus>("cli_status");
+export const cliInstall = () => invoke<CliStatus>("cli_install");
+export const cliUninstall = () => invoke<CliStatus>("cli_uninstall");
+
 // --- drives & permissions -------------------------------------------------
 
 export const drivesList = () => invoke<DriveRow[]>("drives_list");

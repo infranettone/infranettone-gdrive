@@ -5,9 +5,10 @@ import { Accounts } from "./routes/Accounts";
 import { Files } from "./routes/Files";
 import { Drives } from "./routes/Drives";
 import { Permissions } from "./routes/Permissions";
+import { Cli } from "./routes/Cli";
 import { AddAccountWizard } from "./wizard/AddAccountWizard";
 
-type Route = "accounts" | "files" | "drives" | "permissions";
+type Route = "accounts" | "files" | "drives" | "permissions" | "cli";
 
 const LANG_KEY = "gdrive.lang";
 
@@ -69,6 +70,7 @@ export default function App() {
     { id: "files", label: t.nav.files },
     { id: "drives", label: t.nav.drives },
     { id: "permissions", label: t.nav.permissions },
+    { id: "cli", label: t.nav.cli },
   ];
 
   return (
@@ -116,6 +118,7 @@ export default function App() {
           {route === "files" && <Files hasAccount={hasAccount} />}
           {route === "drives" && <Drives hasAccount={hasAccount} />}
           {route === "permissions" && <Permissions hasAccount={hasAccount} />}
+          {route === "cli" && <Cli />}
         </main>
       </div>
 

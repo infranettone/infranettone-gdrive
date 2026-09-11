@@ -16,6 +16,7 @@ const es = {
     files: "Archivos",
     drives: "Unidades",
     permissions: "Permisos",
+    cli: "Terminal",
   },
   common: {
     cancel: "Cancelar",
@@ -75,6 +76,29 @@ const es = {
   drives: {
     title: "Unidades compartidas",
     empty: "Esta cuenta no tiene unidades compartidas.",
+  },
+  cli: {
+    title: "El comando gdrive",
+    subtitle:
+      "Esta aplicación incluye el CLI de gdrive. Instálalo para usar los mismos comandos desde la terminal, con las mismas cuentas.",
+    installed: "Instalado",
+    notInstalled: "No instalado",
+    install: "Instalar el comando",
+    reinstall: "Reinstalar",
+    uninstall: "Desinstalar",
+    resolvedAt: (path: string) => `En la terminal, gdrive resuelve a ${path}`,
+    willInstallTo: (path: string) => `Se instalará en ${path}`,
+    notOnPath: (dir: string) =>
+      `${dir} no está en tu PATH, así que la terminal todavía no encontrará el comando. Añádelo a tu PATH y abre una terminal nueva.`,
+    notOnPathUnix: (dir: string) =>
+      `Añade esta línea a tu ~/.bashrc o ~/.zshrc:\nexport PATH="${dir}:$PATH"`,
+    notOnPathWindows: (dir: string) =>
+      `Añádelo en «Editar las variables de entorno de tu cuenta» → Path → Nuevo:\n${dir}`,
+    notBundled:
+      "Esta compilación no incluye el CLI. Descárgalo de la página de releases.",
+    tryIt: "Pruébalo en una terminal:",
+    uninstallConfirm:
+      "¿Desinstalar el comando gdrive? Sólo se borra la copia que instaló esta aplicación; tus cuentas no se tocan.",
   },
   permissions: {
     title: "Permisos",
@@ -201,6 +225,7 @@ const en: Strings = {
     files: "Files",
     drives: "Drives",
     permissions: "Permissions",
+    cli: "Terminal",
   },
   common: {
     cancel: "Cancel",
@@ -260,6 +285,29 @@ const en: Strings = {
   drives: {
     title: "Shared drives",
     empty: "This account has no shared drives.",
+  },
+  cli: {
+    title: "The gdrive command",
+    subtitle:
+      "This app ships the gdrive CLI. Install it to run the same commands from a terminal, against the same accounts.",
+    installed: "Installed",
+    notInstalled: "Not installed",
+    install: "Install the command",
+    reinstall: "Reinstall",
+    uninstall: "Uninstall",
+    resolvedAt: (path: string) => `In a terminal, gdrive resolves to ${path}`,
+    willInstallTo: (path: string) => `It will be installed at ${path}`,
+    notOnPath: (dir: string) =>
+      `${dir} is not on your PATH, so a terminal won't find the command yet. Add it to your PATH and open a new terminal.`,
+    notOnPathUnix: (dir: string) =>
+      `Add this line to your ~/.bashrc or ~/.zshrc:\nexport PATH="${dir}:$PATH"`,
+    notOnPathWindows: (dir: string) =>
+      `Add it under "Edit environment variables for your account" → Path → New:\n${dir}`,
+    notBundled:
+      "This build does not ship the CLI. Download it from the releases page.",
+    tryIt: "Try it in a terminal:",
+    uninstallConfirm:
+      "Uninstall the gdrive command? Only the copy this app installed is removed; your accounts are untouched.",
   },
   permissions: {
     title: "Permissions",

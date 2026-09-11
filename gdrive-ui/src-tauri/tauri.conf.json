@@ -26,6 +26,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": ["binaries/gdrive"],
     "category": "Utility",
     "shortDescription": "Google Drive from your desktop",
     "longDescription": "Desktop app for gdrive: manage Google Drive accounts, files, shared drives and permissions. Includes a guided wizard for creating the Google OAuth credentials gdrive needs.",

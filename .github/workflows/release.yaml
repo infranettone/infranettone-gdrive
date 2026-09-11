@@ -230,6 +230,17 @@ jobs:
         working-directory: gdrive-ui
         run: npm ci
 
+      # The bundle ships the CLI as a Tauri sidecar, so installing the app
+      # also puts `gdrive` on disk. Tauri resolves the `binaries/gdrive` entry
+      # in tauri.conf.json by appending the target triple, so the file has to
+      # be named for the triple this matrix entry builds.
+      - name: Build the CLI sidecar
+        working-directory: gdrive-ui
+        shell: bash
+        # No argument means "the host triple", which is what the entries
+        # without an explicit target want.
+        run: npm run sidecar -- ${{ matrix.target }}
+
       # Signing is optional, but it cannot be wired straight into the env
       # below: an unset secret expands to an empty string and the variable is
       # still *defined*, which makes Tauri try to import an empty certificate

@@ -82,6 +82,10 @@ Installers are attached to each [release](https://github.com/glotlabs/gdrive/rel
 
 Both macOS builds are produced on Apple Silicon runners — GitHub has retired its Intel ones — with the x64 `.dmg` cross-compiled.
 
+The installers now ship the `gdrive` CLI too, but bundling it is not the same as putting it on your PATH — where the binary lands depends on the package format. The `.deb` installs it as `/usr/bin/gdrive`, so there it just works. For the other formats, open the app's **Terminal** screen: it tells you whether a terminal can already find `gdrive`, and *Install the command* copies it to `~/.local/bin` (or `%LOCALAPPDATA%\Programs\gdrive\bin` on Windows), naming the line to add to your PATH if that directory isn't on it. No elevation is needed, and uninstalling only ever removes the app's own copy.
+
+It is the same binary as the standalone archives above and uses the same accounts, so those archives are only for wanting the CLI without the app.
+
 Like the CLI binaries, these are **not code signed**. macOS Gatekeeper and Windows SmartScreen will warn on first launch; on macOS, right-click the app and choose *Open*. Signing is wired into the release workflow but inert: it only activates for the secrets that are actually set (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, and `TAURI_SIGNING_PRIVATE_KEY` for the updater).
 
 ### The "Add Google account" wizard

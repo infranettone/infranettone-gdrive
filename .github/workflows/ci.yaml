@@ -105,6 +105,12 @@ jobs:
           npm ci
           npm run build
 
+      # `tauri-build` refuses to compile when an `externalBin` is missing, so
+      # the CLI sidecar has to exist even for a check-only build.
+      - name: Build the CLI sidecar
+        working-directory: gdrive-ui
+        run: npm run sidecar
+
       - name: Check
         run: cargo clippy -p gdrive-ui --all-targets --locked -- -D warnings
 
