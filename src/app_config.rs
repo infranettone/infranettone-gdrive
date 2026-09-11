@@ -14,6 +14,10 @@ const ACCOUNT_CONFIG_NAME: &str = "account.json";
 const SECRET_CONFIG_NAME: &str = "secret.json";
 const TOKENS_CONFIG_NAME: &str = "tokens.json";
 
+/// Selects the account for one invocation, without reading or changing the
+/// account saved by `account switch`. The global `--account` flag sets it.
+pub const ACCOUNT_ENV_VAR: &str = "GDRIVE_ACCOUNT";
+
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub base_path: PathBuf,
@@ -64,8 +68,22 @@ impl AppConfig {
 
     pub fn load_current_account() -> Result<AppConfig, Error> {
         let base_path = AppConfig::default_base_path()?;
-        let account_config = AppConfig::load_account_config()?;
-        let account = Account::new(&account_config.current);
+
+        let account_name = match std::env::var(ACCOUNT_ENV_VAR) {
+            Ok(name) if !name.trim().is_empty() => {
+                let name = name.trim().to_string();
+
+                if !base_path.join(&name).join(TOKENS_CONFIG_NAME).exists() {
+                    return Err(Error::AccountNotFound(name));
+                }
+
+                name
+            }
+
+            _ => AppConfig::load_account_config()?.current,
+        };
+
+        let account = Account::new(&account_name);
         let config = AppConfig { base_path, account };
         Ok(config)
     }
@@ -287,6 +305,7 @@ pub enum Error {
     RemoveAccountConfig(io::Error),
     CreateBaseDir(PathBuf, io::Error),
     CredentialsFileUnrecognized,
+    AccountNotFound(String),
 }
 
 impl error::Error for Error {}
@@ -392,6 +411,12 @@ impl Display for Error {
                     f,
                     "The file does not look like a Google OAuth credentials file, it should contain a client_id and a client_secret"
                 )
+            }
+
+            Error::AccountNotFound(name) => {
+                // fmt
+                writeln!(f, "Account '{}' not found", name)?;
+                write!(f, "Use `gdrive account list` to show all accounts.")
             }
         }
     }

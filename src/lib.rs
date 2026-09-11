@@ -7,9 +7,11 @@
 pub mod about;
 pub mod account;
 pub mod app_config;
+pub mod changes;
 pub mod common;
 pub mod drives;
 pub mod files;
 pub mod hub;
 pub mod permissions;
+pub mod revisions;
 pub mod version;

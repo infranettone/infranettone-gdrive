@@ -1,5 +1,8 @@
 use crate::common::drive_file;
 use crate::common::hub_helper;
+use crate::common::json_output;
+use crate::common::json_output::FileJson;
+use crate::common::json_output::FILE_FIELDS;
 use crate::common::table;
 use crate::common::table::Table;
 use crate::files;
@@ -22,6 +25,7 @@ pub struct Config {
     pub skip_header: bool,
     pub truncate_name: bool,
     pub field_separator: String,
+    pub json: bool,
 }
 
 pub async fn list(config: Config) -> Result<(), Error> {
@@ -35,6 +39,12 @@ pub async fn list(config: Config) -> Result<(), Error> {
         },
     )
     .await?;
+
+    if config.json {
+        let files: Vec<FileJson> = files.iter().map(FileJson::from).collect();
+        json_output::print_json(&files);
+        return Ok(());
+    }
 
     let mut values: Vec<[String; 5]> = vec![];
 
@@ -82,6 +92,7 @@ pub async fn list_files(
     hub: &Hub,
     config: &ListFilesConfig,
 ) -> Result<Vec<google_drive3::api::File>, Error> {
+    let fields = format!("files({}),nextPageToken", FILE_FIELDS);
     let mut collected_files: Vec<google_drive3::api::File> = vec![];
     let mut next_page_token: Option<String> = None;
 
@@ -102,10 +113,7 @@ pub async fn list_files(
             .add_scope(google_drive3::api::Scope::Full)
             .supports_all_drives(true)
             .include_items_from_all_drives(true)
-            .param(
-                "fields",
-                "files(id,name,md5Checksum,mimeType,size,createdTime,parents),nextPageToken",
-            )
+            .param("fields", &fields)
             .doit()
             .await
             .map_err(Error::ListFiles)?;

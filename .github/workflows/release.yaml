@@ -6,8 +6,9 @@ name: Release
 # so ordinary pushes to main are a no-op — and a run that failed part way can
 # simply be re-run.
 #
-# Linux only for now. The macOS and Windows builds were dropped to keep
-# releases fast; see "Other platforms" in the README to bring them back.
+# Linux, plus the CLI for Windows. The macOS builds and the Windows desktop
+# app were dropped to keep releases fast; see "Other platforms" in the README
+# to bring them back.
 on:
   push:
     branches: [main]
@@ -147,6 +148,30 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ needs.prepare.outputs.tag }}" gdrive_linux-x64.tar.gz --clobber
 
+  cli-windows:
+    name: CLI (Windows x64)
+    needs: [prepare, create-release]
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        shell: bash
+        run: |
+          cargo build --release --locked -p gdrive
+          7z a -tzip gdrive_windows-x64.zip ./target/release/gdrive.exe
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: gh release upload "${{ needs.prepare.outputs.tag }}" gdrive_windows-x64.zip --clobber
+
   desktop:
     name: Desktop app (Linux x64)
     needs: [prepare, create-release]
@@ -226,7 +251,7 @@ jobs:
 
   publish:
     name: Publish release
-    needs: [prepare, create-release, cli, desktop]
+    needs: [prepare, create-release, cli, cli-windows, desktop]
     runs-on: ubuntu-latest
 
     steps:
