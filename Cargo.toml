@@ -4,7 +4,7 @@ members = [".", "gdrive-ui/src-tauri"]
 # The one place the version is set. The CLI, the desktop app, the git tag and
 # the GitHub release all derive from this; bumping it on main publishes.
 [workspace.package]
-version = "3.9.1"
+version = "3.10.0"
 
 [package]
 name = "gdrive"
