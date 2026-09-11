@@ -32,9 +32,10 @@ you will help support:
 
 ### Install binary
 
-- Download the latest binary from [the release section](https://github.com/glotlabs/gdrive/releases)
-- Unpack and put the binary somewhere in your PATH (i.e. `/usr/local/bin` on linux and macos)
-- Note that the binary is not code signed and will cause a warning on windows and macos when running. This will be fixed later, but for now you can find a workaround via your favorite search engine.
+- Download `gdrive_linux-x64.tar.gz` from [the release section](https://github.com/glotlabs/gdrive/releases)
+- Unpack and put the binary somewhere in your PATH (i.e. `/usr/local/bin`)
+- The binary is statically linked (musl), so it runs on any Linux distro
+- Releases currently ship Linux builds only; see [Other platforms](#other-platforms)
 
 ### Add google account to gdrive
 
@@ -71,22 +72,13 @@ A cross-platform desktop app (Linux, macOS, Windows) built with [Tauri](https://
 
 ### Download
 
-Installers are attached to each [release](https://github.com/glotlabs/gdrive/releases):
-
-| Platform | Files |
-| --- | --- |
-| Linux x64 | `.AppImage`, `.deb`, `.rpm` |
-| macOS arm64 (Apple Silicon) | `.dmg` |
-| macOS x64 (Intel) | `.dmg` |
-| Windows x64 | `.msi`, `.exe` |
-
-Both macOS builds are produced on Apple Silicon runners — GitHub has retired its Intel ones — with the x64 `.dmg` cross-compiled.
+Installers for Linux x64 are attached to each [release](https://github.com/glotlabs/gdrive/releases): `.deb`, `.rpm` and `.AppImage`. The app itself is cross-platform, but releases currently build Linux only — see [Other platforms](#other-platforms).
 
 The installers now ship the `gdrive` CLI too, but bundling it is not the same as putting it on your PATH — where the binary lands depends on the package format. The `.deb` installs it as `/usr/bin/gdrive`, so there it just works. For the other formats, open the app's **Terminal** screen: it tells you whether a terminal can already find `gdrive`, and *Install the command* copies it to `~/.local/bin` (or `%LOCALAPPDATA%\Programs\gdrive\bin` on Windows), naming the line to add to your PATH if that directory isn't on it. No elevation is needed, and uninstalling only ever removes the app's own copy.
 
 It is the same binary as the standalone archives above and uses the same accounts, so those archives are only for wanting the CLI without the app.
 
-Like the CLI binaries, these are **not code signed**. macOS Gatekeeper and Windows SmartScreen will warn on first launch; on macOS, right-click the app and choose *Open*. Signing is wired into the release workflow but inert: it only activates for the secrets that are actually set (`APPLE_CERTIFICATE`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, and `TAURI_SIGNING_PRIVATE_KEY` for the updater).
+Updater signing is wired into the release workflow but inert: it only activates when the `TAURI_SIGNING_PRIVATE_KEY` secret is set.
 
 ### The "Add Google account" wizard
 
@@ -108,6 +100,16 @@ The app is available in English and Spanish.
 ### Building it yourself
 
 See [gdrive-ui/README.md](gdrive-ui/README.md).
+
+## Other platforms
+
+The code is cross-platform, and both the CLI and the desktop app have built and shipped for macOS (arm64 and x64) and Windows x64. The pipelines currently build **Linux only**, though, to keep CI and releases fast. Bringing the other platforms back is deferred until someone needs them. When that happens:
+
+- The last workflows that built every platform are at commit `5b6e1f6` — `git show 5b6e1f6:.github/workflows/release.yaml` (and `ci.yaml`). Restore the `matrix` of the `cli` and `desktop` jobs from there.
+- macOS jobs must run on `macos-14` (Apple Silicon). The Intel `.dmg` is cross-compiled with `--target x86_64-apple-darwin`: GitHub has retired its Intel runners, and a job asking for one waits forever.
+- Cross builds pass the triple to the sidecar script: `npm run sidecar -- <triple>`.
+- macOS Gatekeeper and Windows SmartScreen warn on unsigned binaries. Apple signing needs the `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID` secrets, promoted into the env the same way `TAURI_SIGNING_PRIVATE_KEY` is.
+- The app's Terminal screen already has a Windows code path (it installs into `%LOCALAPPDATA%\Programs\gdrive\bin`), but it has never been exercised on a real machine.
 
 ## Releasing
 

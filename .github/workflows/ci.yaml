@@ -5,17 +5,20 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to the same branch or PR makes an older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
+# Linux only for now. The macOS and Windows jobs were dropped to keep the
+# pipeline fast; see "Other platforms" in the README to bring them back.
 jobs:
   cli:
-    name: CLI (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, macos-latest, windows-latest]
+    name: CLI
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v4
@@ -29,14 +32,13 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
 
-      - name: Build
-        run: cargo build -p gdrive --locked
+      # No separate `cargo build`: clippy --all-targets and the test build
+      # between them already compile every target.
+      - name: Clippy
+        run: cargo clippy -p gdrive --all-targets --locked -- -D warnings
 
       - name: Test
         run: cargo test -p gdrive --locked
-
-      - name: Clippy
-        run: cargo clippy -p gdrive --all-targets --locked -- -D warnings
 
   frontend:
     name: Frontend
@@ -59,12 +61,8 @@ jobs:
       - run: npm run build
 
   desktop:
-    name: Desktop app (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, macos-latest, windows-latest]
+    name: Desktop app
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v4
@@ -82,10 +80,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install Linux system dependencies
-        if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev \
             librsvg2-dev \
             patchelf \
@@ -105,11 +102,14 @@ jobs:
           npm ci
           npm run build
 
-      # `tauri-build` refuses to compile when an `externalBin` is missing, so
-      # the CLI sidecar has to exist even for a check-only build.
-      - name: Build the CLI sidecar
-        working-directory: gdrive-ui
-        run: npm run sidecar
+      # `tauri-build` refuses to compile when an `externalBin` is missing. This
+      # job only checks and tests — it never bundles or runs the sidecar — so
+      # an empty placeholder is enough, and it saves a full release build of
+      # the CLI. The release workflow builds the real one.
+      - name: Stub the CLI sidecar
+        run: |
+          mkdir -p gdrive-ui/src-tauri/binaries
+          touch "gdrive-ui/src-tauri/binaries/gdrive-$(rustc -vV | sed -n 's/^host: //p')"
 
       - name: Check
         run: cargo clippy -p gdrive-ui --all-targets --locked -- -D warnings

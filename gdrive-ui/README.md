@@ -61,7 +61,7 @@ npm run sidecar
 npm run tauri build
 ```
 
-Bundles land in `../target/release/bundle/`. CI does this for all platforms in [`.github/workflows/release.yaml`](../.github/workflows/release.yaml).
+Bundles land in `../target/release/bundle/`. CI builds the Linux bundles in [`.github/workflows/release.yaml`](../.github/workflows/release.yaml).
 
 The app's version is not set here: `src-tauri/Cargo.toml` inherits it from `[workspace.package]` in the root `Cargo.toml`, `tauri.conf.json` has no `version` key so Tauri falls back to the crate's, and `package.json` carries none at all. See [Releasing](../README.md#releasing).
 

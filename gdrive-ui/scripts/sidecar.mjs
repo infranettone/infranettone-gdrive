@@ -2,7 +2,12 @@
 // as `binaries/gdrive` in tauri.conf.json: `binaries/gdrive-<target-triple>`.
 //
 // `tauri build` and `tauri dev` both refuse to start when the sidecar for the
-// host triple is missing, so this runs before either of them.
+// target triple is missing, so this runs before either of them.
+//
+// With no argument it builds for the host *without* `--target`, into the same
+// target/release/ that `tauri build` uses, so the dependencies compiled here
+// are reused by the app build instead of being compiled a second time. Pass a
+// triple only for a cross build.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -10,9 +15,10 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-// The triple can be passed through for a cross build; otherwise use rustc's host.
+const requested = process.argv[2];
+
 const triple =
-  process.argv[2] ??
+  requested ??
   execFileSync("rustc", ["-vV"], { encoding: "utf8" })
     .split("\n")
     .find((line) => line.startsWith("host:"))
@@ -21,16 +27,17 @@ const triple =
 
 const ext = triple.includes("windows") ? ".exe" : "";
 
-execFileSync("cargo", ["build", "--release", "-p", "gdrive", "--target", triple], {
-  cwd: root,
-  stdio: "inherit",
-});
+const args = ["build", "--release", "-p", "gdrive"];
+if (requested) args.push("--target", requested);
+
+execFileSync("cargo", args, { cwd: root, stdio: "inherit" });
+
+const built = requested
+  ? join(root, "target", requested, "release", `gdrive${ext}`)
+  : join(root, "target", "release", `gdrive${ext}`);
 
 const binaries = join(root, "gdrive-ui", "src-tauri", "binaries");
 mkdirSync(binaries, { recursive: true });
-copyFileSync(
-  join(root, "target", triple, "release", `gdrive${ext}`),
-  join(binaries, `gdrive-${triple}${ext}`),
-);
+copyFileSync(built, join(binaries, `gdrive-${triple}${ext}`));
 
 console.log(`Sidecar ready: binaries/gdrive-${triple}${ext}`);

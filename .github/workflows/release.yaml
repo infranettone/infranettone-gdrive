@@ -5,6 +5,9 @@ name: Release
 # and publishes the release. It does nothing once that version is published,
 # so ordinary pushes to main are a no-op — and a run that failed part way can
 # simply be re-run.
+#
+# Linux only for now. The macOS and Windows builds were dropped to keep
+# releases fast; see "Other platforms" in the README to bring them back.
 on:
   push:
     branches: [main]
@@ -71,7 +74,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # Created as a draft so the release only becomes visible once every
-      # platform has uploaded successfully. Every step is idempotent, so a
+      # artifact has uploaded successfully. Every step is idempotent, so a
       # re-run after a failed build picks up where it left off.
       - id: create
         env:
@@ -80,8 +83,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # `gh release create --draft` does NOT create the tag — a draft has
-          # no tag until it is published — so create it ourselves first.
+          # A draft has no tag until it is published, so create it ourselves
+          # first.
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists."
           else
@@ -89,16 +92,29 @@ jobs:
             git push origin "refs/tags/$TAG"
           fi
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          # Drafts are invisible to `GET /releases/tags/{tag}`, so an existing
+          # one can only be found by listing releases.
+          find_draft() {
+            gh api "repos/$GITHUB_REPOSITORY/releases" \
+              --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -1
+          }
+
+          release_id="$(find_draft)"
+
+          if [ -n "$release_id" ]; then
             echo "Draft release for $TAG already exists."
           else
-            gh release create "$TAG" --draft --title "$TAG" --generate-notes
+            # Create through the API rather than `gh release create`: the
+            # response carries the id. Listing straight after creating is
+            # eventually consistent and can miss the new draft, which is what
+            # failed the first 3.10.0 run.
+            release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$TAG" \
+              -f name="$TAG" \
+              -F draft=true \
+              -F generate_release_notes=true \
+              --jq .id)"
           fi
-
-          # Drafts are invisible to `GET /releases/tags/{tag}`, so find the id
-          # by listing releases, which does include them.
-          release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases" \
-            --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -1)"
 
           if [ -z "$release_id" ]; then
             echo "Could not resolve the release id for $TAG" >&2
@@ -108,90 +124,34 @@ jobs:
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
   cli:
-    name: CLI (${{ matrix.label }})
+    name: CLI (Linux x64)
     needs: [prepare, create-release]
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            label: Linux x64
-            archive: gdrive_linux-x64.tar.gz
-          - os: macos-latest
-            label: macOS x64
-            archive: gdrive_macos-x64.tar.gz
-          - os: windows-latest
-            label: Windows x64
-            archive: gdrive_windows-x64.zip
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        if: matrix.os != 'ubuntu-latest'
-        with:
-          targets: ${{ matrix.os == 'macos-latest' && 'x86_64-apple-darwin' || '' }}
-
       # `-p gdrive` keeps this to the CLI: the workspace also holds the
-      # desktop app, which the `desktop` job builds instead.
-      - name: Build (Linux, static musl)
-        if: matrix.os == 'ubuntu-latest'
+      # desktop app, which the `desktop` job builds instead. musl makes the
+      # binary fully static, so it runs on any distro regardless of glibc.
+      - name: Build (static musl)
         run: |
           docker run --rm -t \
             -v "$HOME/.cargo/registry/:/root/.cargo/registry" \
             -v "$(pwd)":/volume \
             clux/muslrust:stable cargo build --release -p gdrive
-          tar -czf "${{ matrix.archive }}" -C target/x86_64-unknown-linux-musl/release gdrive
-
-      - name: Build (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          cargo build --release -p gdrive --target x86_64-apple-darwin
-          tar -czf "${{ matrix.archive }}" -C target/x86_64-apple-darwin/release gdrive
-
-      - name: Build (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: bash
-        run: |
-          cargo build --release -p gdrive
-          7z a -tzip "${{ matrix.archive }}" ./target/release/gdrive.exe
+          tar -czf gdrive_linux-x64.tar.gz -C target/x86_64-unknown-linux-musl/release gdrive
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: gh release upload "${{ needs.prepare.outputs.tag }}" "${{ matrix.archive }}" --clobber
+        run: gh release upload "${{ needs.prepare.outputs.tag }}" gdrive_linux-x64.tar.gz --clobber
 
   desktop:
-    name: Desktop app (${{ matrix.label }})
+    name: Desktop app (Linux x64)
     needs: [prepare, create-release]
-    runs-on: ${{ matrix.platform }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # AppImage, .deb and .rpm. Built on 22.04 so the glibc floor stays low.
-          - platform: ubuntu-22.04
-            label: Linux x64
-            args: ""
-            target: ""
-          # Both macOS builds run on Apple Silicon and the Intel one
-          # cross-compiles: GitHub has retired its Intel (macos-13) runners, so
-          # a job asking for one waits forever.
-          - platform: macos-14
-            label: macOS arm64
-            args: "--target aarch64-apple-darwin"
-            target: aarch64-apple-darwin
-          - platform: macos-14
-            label: macOS x64
-            args: "--target x86_64-apple-darwin"
-            target: x86_64-apple-darwin
-          # .msi and an NSIS .exe installer.
-          - platform: windows-latest
-            label: Windows x64
-            args: ""
-            target: ""
+    # AppImage, .deb and .rpm. Built on 22.04 so the glibc floor stays low.
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v4
@@ -203,18 +163,15 @@ jobs:
           cache-dependency-path: gdrive-ui/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ". -> target"
 
       - name: Install Linux system dependencies
-        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev \
             librsvg2-dev \
             patchelf \
@@ -231,46 +188,26 @@ jobs:
         run: npm ci
 
       # The bundle ships the CLI as a Tauri sidecar, so installing the app
-      # also puts `gdrive` on disk. Tauri resolves the `binaries/gdrive` entry
-      # in tauri.conf.json by appending the target triple, so the file has to
-      # be named for the triple this matrix entry builds.
+      # also installs `gdrive`. With no triple the script builds into the same
+      # target/release/ as the app, so `tauri build` reuses these dependencies
+      # instead of compiling them a second time.
       - name: Build the CLI sidecar
         working-directory: gdrive-ui
-        shell: bash
-        # No argument means "the host triple", which is what the entries
-        # without an explicit target want.
-        run: npm run sidecar -- ${{ matrix.target }}
+        run: npm run sidecar
 
-      # Signing is optional, but it cannot be wired straight into the env
-      # below: an unset secret expands to an empty string and the variable is
-      # still *defined*, which makes Tauri try to import an empty certificate
-      # and fail. So only promote the ones that actually have a value.
-      - name: Configure optional code signing
-        shell: bash
+      # Updater signing is optional, but it cannot be wired straight into the
+      # env below: an unset secret expands to an empty string and the variable
+      # is still *defined*, which makes Tauri try to use an empty key and fail.
+      # So only promote the ones that actually have a value.
+      - name: Configure optional updater signing
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          for name in \
-            APPLE_CERTIFICATE \
-            APPLE_CERTIFICATE_PASSWORD \
-            APPLE_SIGNING_IDENTITY \
-            APPLE_ID \
-            APPLE_PASSWORD \
-            APPLE_TEAM_ID \
-            TAURI_SIGNING_PRIVATE_KEY \
-            TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-          do
+          for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
             value="${!name}"
             if [ -n "$value" ]; then
-              # Delimiter form, so a multi-line secret (a PEM key, a wrapped
-              # base64 blob) survives intact.
+              # Delimiter form, so a multi-line secret survives intact.
               {
                 echo "$name<<__GDRIVE_SECRET_EOF__"
                 echo "$value"
@@ -280,17 +217,12 @@ jobs:
             fi
           done
 
-          if [ -z "${APPLE_CERTIFICATE}" ]; then
-            echo "::notice::No Apple signing secrets configured; the bundle will be unsigned."
-          fi
-
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: gdrive-ui
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          args: ${{ matrix.args }}
 
   publish:
     name: Publish release
