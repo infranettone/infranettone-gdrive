@@ -13,8 +13,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
-# Linux only for now. The macOS and Windows jobs were dropped to keep the
-# pipeline fast; see "Other platforms" in the README to bring them back.
+# Linux, plus the CLI on Windows. The macOS jobs and the Windows desktop app
+# were dropped to keep the pipeline fast; see "Other platforms" in the README
+# to bring them back.
 jobs:
   cli:
     name: CLI
@@ -36,6 +37,22 @@ jobs:
       # between them already compile every target.
       - name: Clippy
         run: cargo clippy -p gdrive --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test -p gdrive --locked
+
+  # The CLI ships for Windows because the KeePass sync agent drives it there.
+  # Formatting and clippy already ran on Linux; this catches platform breaks.
+  cli-windows:
+    name: CLI (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Test
         run: cargo test -p gdrive --locked

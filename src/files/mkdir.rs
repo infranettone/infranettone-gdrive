@@ -3,6 +3,9 @@ use crate::common::delegate::UploadDelegateConfig;
 use crate::common::drive_file::MIME_TYPE_DRIVE_FOLDER;
 use crate::common::empty_file::EmptyFile;
 use crate::common::hub_helper;
+use crate::common::json_output;
+use crate::common::json_output::FileJson;
+use crate::common::json_output::FILE_FIELDS;
 use crate::hub::Hub;
 use std::error;
 use std::fmt::Display;
@@ -16,7 +19,9 @@ pub struct Config {
     pub print_only_id: bool,
 }
 
-pub async fn mkdir(config: Config) -> Result<(), Error> {
+/// Creates a directory. With `json` the created directory is printed as json,
+/// which takes precedence over `print_only_id`.
+pub async fn mkdir(config: Config, json: bool) -> Result<(), Error> {
     let hub = hub_helper::get_hub().await.map_err(Error::Hub)?;
     let delegate_config = UploadDelegateConfig::default();
 
@@ -24,7 +29,9 @@ pub async fn mkdir(config: Config) -> Result<(), Error> {
         .await
         .map_err(Error::CreateDirectory)?;
 
-    if config.print_only_id {
+    if json {
+        json_output::print_json(&FileJson::from(&file));
+    } else if config.print_only_id {
         print!("{}", file.id.unwrap_or_default())
     } else {
         println!(
@@ -55,7 +62,7 @@ pub async fn create_directory(
     let req = hub
         .files()
         .create(dst_file)
-        .param("fields", "id,name,size,createdTime,modifiedTime,md5Checksum,mimeType,parents,shared,description,webContentLink,webViewLink")
+        .param("fields", FILE_FIELDS)
         .add_scope(google_drive3::api::Scope::Full)
         .delegate(&mut delegate)
         .supports_all_drives(true);

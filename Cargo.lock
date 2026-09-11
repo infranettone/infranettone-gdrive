@@ -1489,7 +1489,7 @@ dependencies = [
 
 [[package]]
 name = "gdrive"
-version = "3.10.0"
+version = "3.11.0"
 dependencies = [
  "async-recursion",
  "bytes",
@@ -1515,7 +1515,7 @@ dependencies = [
 
 [[package]]
 name = "gdrive-ui"
-version = "3.10.0"
+version = "3.11.0"
 dependencies = [
  "gdrive",
  "google-drive3",

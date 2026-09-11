@@ -9,12 +9,17 @@ use crate::common::file_tree;
 use crate::common::file_tree::FileTree;
 use crate::common::hub_helper;
 use crate::common::id_gen::IdGen;
+use crate::common::json_output;
+use crate::common::json_output::FileJson;
+use crate::common::json_output::FILE_FIELDS;
+use crate::common::key_value;
 use crate::files;
 use crate::files::info::DisplayConfig;
 use crate::files::mkdir;
 use crate::hub::Hub;
 use human_bytes::human_bytes;
 use mime::Mime;
+use std::collections::HashMap;
 use std::error;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -33,6 +38,9 @@ pub struct Config {
     pub print_chunk_info: bool,
     pub upload_directories: bool,
     pub print_only_id: bool,
+    /// Set on a regular uploaded file. Not applied to directory uploads.
+    pub app_properties: Vec<(String, String)>,
+    pub json: bool,
 }
 
 pub async fn upload(config: Config) -> Result<(), Error> {
@@ -98,15 +106,24 @@ pub async fn upload_regular(
 
     let reader = std::io::BufReader::new(file);
 
-    if !config.print_only_id {
+    if !config.print_only_id && !config.json {
         println!("Uploading {}", file_path.display());
     }
 
-    let file = upload_file(hub, reader, None, file_info, delegate_config)
-        .await
-        .map_err(Error::Upload)?;
+    let file = upload_file(
+        hub,
+        reader,
+        None,
+        file_info,
+        delegate_config,
+        key_value::to_app_properties(&config.app_properties),
+    )
+    .await
+    .map_err(Error::Upload)?;
 
-    if config.print_only_id {
+    if config.json {
+        json_output::print_json(&FileJson::from(&file));
+    } else if config.print_only_id {
         print!("{}", file.id.unwrap_or_default())
     } else {
         println!("File successfully uploaded");
@@ -193,6 +210,7 @@ pub async fn upload_directory(
                 Some(file.drive_id.clone()),
                 file_info,
                 delegate_config.clone(),
+                None,
             )
             .await
             .map_err(Error::Upload)?;
@@ -221,6 +239,7 @@ pub async fn upload_file<RS>(
     file_id: Option<String>,
     file_info: FileInfo,
     delegate_config: UploadDelegateConfig,
+    app_properties: Option<HashMap<String, String>>,
 ) -> Result<google_drive3::api::File, google_drive3::Error>
 where
     RS: google_drive3::client::ReadSeek,
@@ -230,6 +249,7 @@ where
         name: Some(file_info.name),
         mime_type: Some(file_info.mime_type.to_string()),
         parents: file_info.parents,
+        app_properties,
         ..google_drive3::api::File::default()
     };
 
@@ -239,7 +259,7 @@ where
     let req = hub
         .files()
         .create(dst_file)
-        .param("fields", "id,name,size,createdTime,modifiedTime,md5Checksum,mimeType,parents,shared,description,webContentLink,webViewLink")
+        .param("fields", FILE_FIELDS)
         .add_scope(google_drive3::api::Scope::Full)
         .delegate(&mut delegate)
         .supports_all_drives(true);

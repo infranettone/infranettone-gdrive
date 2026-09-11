@@ -32,10 +32,10 @@ you will help support:
 
 ### Install binary
 
-- Download `gdrive_linux-x64.tar.gz` from [the release section](https://github.com/glotlabs/gdrive/releases)
-- Unpack and put the binary somewhere in your PATH (i.e. `/usr/local/bin`)
-- The binary is statically linked (musl), so it runs on any Linux distro
-- Releases currently ship Linux builds only; see [Other platforms](#other-platforms)
+- Download `gdrive_linux-x64.tar.gz` (or `gdrive_windows-x64.zip`) from [the release section](https://github.com/glotlabs/gdrive/releases)
+- Unpack and put the binary somewhere in your PATH (i.e. `/usr/local/bin`, or `%LOCALAPPDATA%\Programs\gdrive\bin` on Windows)
+- The Linux binary is statically linked (musl), so it runs on any Linux distro
+- Releases ship the CLI for Linux and Windows, and the desktop app for Linux only; see [Other platforms](#other-platforms)
 
 ### Add google account to gdrive
 
@@ -65,6 +65,65 @@ For example on an AWS instance the api returns a lot of `429 Too Many Requests` 
 While the same file uploads without any errors from a Linode instance.
 Gdrive has retry logic built in for these errors, but it can slow down the upload significantly.
 To check if you are affected by these errors you can run the `upload` command with these flags: `--print-chunk-errors` `--print-chunk-info`.
+
+## Scripting gdrive
+
+These options make gdrive safe to drive from another program, such as the [KeePass sync agent](https://github.com/infranettone/infranettone-keepass-gdrive-sync-agent).
+
+### Json output
+
+`files info`, `files list`, `files upload`, `files update`, `files mkdir`, `files revisions list|keep` and `files changes list|start-token` accept `--json`. Files always include `md5Checksum`, `headRevisionId`, `version`, `trashed`, `appProperties` and `lastModifyingUser`; times are RFC 3339 in UTC.
+
+```sh
+gdrive files info <FILE_ID> --json
+```
+
+### Choosing the account per command
+
+`--account <NAME>` (or the `GDRIVE_ACCOUNT` environment variable) uses that account for one command without reading or changing the account selected with `account switch`.
+
+### Safe updates
+
+- `files update --if-md5 <MD5>` only uploads when the file's md5 on Drive is still the one you expect, and exits with code 7 otherwise. Drive has no conditional upload, so a writer that commits between the check and the upload still wins: check `files revisions list` afterwards if that matters.
+- `--keep-revision-forever` stops Drive from purging the new revision 30 days after newer content is uploaded (Drive allows 200 kept revisions per file).
+- `--app-property KEY=VALUE` (repeatable, also on `files upload`) tags the file, for example with the device that wrote it.
+
+### Revisions
+
+```sh
+gdrive files revisions list <FILE_ID> [--json]
+gdrive files revisions download <FILE_ID> <REVISION_ID> --destination <FILE_PATH> [--overwrite]
+gdrive files revisions keep <FILE_ID> <REVISION_ID> [--unset]
+```
+
+Downloads are checked against the revision's md5 before they replace the destination.
+
+### Changes
+
+```sh
+gdrive files changes start-token
+gdrive files changes list <PAGE_TOKEN> --json
+```
+
+`changes list` returns `newStartPageToken` once it has caught up (store it for the next call), or `nextPageToken` when `--max` stopped it early.
+
+### Exit codes
+
+`files info|list|download|upload|update|delete|mkdir`, `files revisions` and `files changes` exit with:
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | Other error |
+| 2 | Invalid command line arguments |
+| 3 | File or revision not found |
+| 4 | No usable account, invalid credentials or no permission |
+| 5 | Network error (retryable) |
+| 6 | Rate limited by Drive (retry after a backoff) |
+| 7 | Precondition failed, e.g. `--if-md5` did not match; nothing changed |
+| 8 | Downloaded content did not match its md5 |
+| 9 | Drive server error (retryable) |
+| 10 | Destination file exists and `--overwrite` was not given |
 
 ## Desktop app
 
@@ -103,9 +162,9 @@ See [gdrive-ui/README.md](gdrive-ui/README.md).
 
 ## Other platforms
 
-The code is cross-platform, and both the CLI and the desktop app have built and shipped for macOS (arm64 and x64) and Windows x64. The pipelines currently build **Linux only**, though, to keep CI and releases fast. Bringing the other platforms back is deferred until someone needs them. When that happens:
+The code is cross-platform, and both the CLI and the desktop app have built and shipped for macOS (arm64 and x64) and Windows x64. To keep CI and releases fast, the pipelines currently build **Linux**, plus the **CLI for Windows** (the KeePass sync agent needs it there). Bringing the other platforms back is deferred until someone needs them. When that happens:
 
-- The last workflows that built every platform are at commit `5b6e1f6` — `git show 5b6e1f6:.github/workflows/release.yaml` (and `ci.yaml`). Restore the `matrix` of the `cli` and `desktop` jobs from there.
+- The last workflows that built every platform are at commit `5b6e1f6` — `git show 5b6e1f6:.github/workflows/release.yaml` (and `ci.yaml`). Restore the `matrix` of the `cli` and `desktop` jobs from there; the Windows CLI already has its own `cli-windows` jobs.
 - macOS jobs must run on `macos-14` (Apple Silicon). The Intel `.dmg` is cross-compiled with `--target x86_64-apple-darwin`: GitHub has retired its Intel runners, and a job asking for one waits forever.
 - Cross builds pass the triple to the sidecar script: `npm run sidecar -- <triple>`.
 - macOS Gatekeeper and Windows SmartScreen warn on unsigned binaries. Apple signing needs the `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID` secrets, promoted into the env the same way `TAURI_SIGNING_PRIVATE_KEY` is.

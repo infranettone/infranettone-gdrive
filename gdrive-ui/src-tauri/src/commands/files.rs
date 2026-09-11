@@ -165,6 +165,8 @@ pub async fn files_upload(
         print_chunk_info: false,
         upload_directories: recursive,
         print_only_id: false,
+        app_properties: vec![],
+        json: false,
     })
     .await
     .map_err(UiError::from_display)

@@ -3,6 +3,9 @@ use google_drive3::chrono::DateTime;
 use human_bytes::human_bytes;
 
 use crate::common::hub_helper;
+use crate::common::json_output;
+use crate::common::json_output::FileJson;
+use crate::common::json_output::FILE_FIELDS;
 use crate::hub::Hub;
 use std::error;
 use std::fmt::Display;
@@ -11,6 +14,7 @@ use std::fmt::Formatter;
 pub struct Config {
     pub file_id: String,
     pub size_in_bytes: bool,
+    pub json: bool,
 }
 
 pub async fn info(config: Config) -> Result<(), Error> {
@@ -19,6 +23,11 @@ pub async fn info(config: Config) -> Result<(), Error> {
     let file = get_file(&hub, &config.file_id)
         .await
         .map_err(Error::GetFile)?;
+
+    if config.json {
+        json_output::print_json(&FileJson::from(&file));
+        return Ok(());
+    }
 
     let fields = prepare_fields(
         &file,
@@ -36,10 +45,12 @@ pub async fn get_file(
     hub: &Hub,
     file_id: &str,
 ) -> Result<google_drive3::api::File, google_drive3::Error> {
+    let fields = format!("{},shortcutDetails(targetId,targetMimeType)", FILE_FIELDS);
+
     let (_, file) = hub
         .files()
         .get(file_id)
-        .param("fields", "id,name,size,createdTime,modifiedTime,md5Checksum,mimeType,parents,shared,description,webContentLink,webViewLink,shortcutDetails(targetId,targetMimeType)")
+        .param("fields", &fields)
         .supports_all_drives(true)
         .add_scope(google_drive3::api::Scope::Full)
         .doit()

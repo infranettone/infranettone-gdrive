@@ -1,13 +1,18 @@
 use clap::{Parser, Subcommand};
 use gdrive::about;
 use gdrive::account;
+use gdrive::app_config;
+use gdrive::changes;
 use gdrive::common::delegate::ChunkSize;
+use gdrive::common::exit_code::ExitCode;
+use gdrive::common::key_value;
 use gdrive::common::permission;
 use gdrive::drives;
 use gdrive::files;
 use gdrive::files::list::ListQuery;
 use gdrive::files::list::ListSortOrder;
 use gdrive::permissions;
+use gdrive::revisions;
 use gdrive::version;
 use mime::Mime;
 use std::error::Error;
@@ -18,6 +23,10 @@ use std::path::PathBuf;
 struct Cli {
     #[command(subcommand)]
     command: Command,
+
+    /// Use this account for this command only, without changing the current account. Can also be set with the GDRIVE_ACCOUNT environment variable
+    #[arg(long, global = true, value_name = "ACCOUNT_NAME")]
+    account: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -113,6 +122,10 @@ enum FileCommand {
         /// Display size in bytes
         #[arg(long, default_value_t = false)]
         size_in_bytes: bool,
+
+        /// Print the file as json, including md5, head revision and app properties
+        #[arg(long)]
+        json: bool,
     },
 
     /// List files
@@ -148,6 +161,10 @@ enum FileCommand {
         /// Field separator
         #[arg(long, default_value_t = String::from("\t"))]
         field_separator: String,
+
+        /// Print the files as a json array
+        #[arg(long)]
+        json: bool,
     },
 
     /// Download file
@@ -208,6 +225,14 @@ enum FileCommand {
         /// Print only id of file/folder
         #[arg(long, default_value_t = false)]
         print_only_id: bool,
+
+        /// Set an app property on the uploaded file, as KEY=VALUE. Can be repeated. Not applied with --recursive
+        #[arg(long = "app-property", value_name = "KEY=VALUE", value_parser = key_value::parse_app_property)]
+        app_properties: Vec<(String, String)>,
+
+        /// Print the uploaded file as json
+        #[arg(long)]
+        json: bool,
     },
 
     /// Update file. This will create a new version of the file. The older versions will typically be kept for 30 days.
@@ -233,6 +258,22 @@ enum FileCommand {
         /// Print details about each chunk
         #[arg(long, value_name = "", default_value_t = false)]
         print_chunk_info: bool,
+
+        /// Keep the new revision forever. Otherwise Drive purges it 30 days after newer content is uploaded
+        #[arg(long)]
+        keep_revision_forever: bool,
+
+        /// Set an app property on the file, as KEY=VALUE. Can be repeated
+        #[arg(long = "app-property", value_name = "KEY=VALUE", value_parser = key_value::parse_app_property)]
+        app_properties: Vec<(String, String)>,
+
+        /// Only update if the file's md5 on Drive is this one, otherwise exit with code 7 without uploading. The check runs right before the upload, so verify the revisions afterwards if a concurrent writer must never be missed
+        #[arg(long, value_name = "MD5")]
+        if_md5: Option<String>,
+
+        /// Print the updated file as json
+        #[arg(long)]
+        json: bool,
     },
 
     /// Delete file
@@ -257,6 +298,10 @@ enum FileCommand {
         /// Print only id of folder
         #[arg(long, default_value_t = false)]
         print_only_id: bool,
+
+        /// Print the created directory as json
+        #[arg(long)]
+        json: bool,
     },
 
     /// Rename file/directory
@@ -312,6 +357,114 @@ enum FileCommand {
         /// Overwrite existing files
         #[arg(long)]
         overwrite: bool,
+    },
+
+    /// Commands for managing file revisions
+    Revisions {
+        #[command(subcommand)]
+        command: RevisionCommand,
+    },
+
+    /// Commands for listing changes to files
+    Changes {
+        #[command(subcommand)]
+        command: ChangeCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum RevisionCommand {
+    /// List the revisions of a file, oldest first
+    List {
+        /// File id
+        file_id: String,
+
+        /// Print the revisions as a json array
+        #[arg(long)]
+        json: bool,
+
+        /// Don't print header
+        #[arg(long)]
+        skip_header: bool,
+
+        /// Field separator
+        #[arg(long, default_value_t = String::from("\t"))]
+        field_separator: String,
+    },
+
+    /// Download a revision of a file. Its md5 is verified before the file is written
+    Download {
+        /// File id
+        file_id: String,
+
+        /// Revision id
+        revision_id: String,
+
+        /// Path of the file to write
+        #[arg(
+            long,
+            value_name = "FILE_PATH",
+            required_unless_present = "stdout",
+            conflicts_with = "stdout"
+        )]
+        destination: Option<PathBuf>,
+
+        /// Overwrite the destination file if it exists
+        #[arg(long)]
+        overwrite: bool,
+
+        /// Write the revision to stdout
+        #[arg(long)]
+        stdout: bool,
+    },
+
+    /// Keep a revision forever. Drive allows this on at most 200 revisions per file
+    Keep {
+        /// File id
+        file_id: String,
+
+        /// Revision id
+        revision_id: String,
+
+        /// Stop keeping the revision forever, so Drive purges it 30 days after newer content is uploaded
+        #[arg(long)]
+        unset: bool,
+
+        /// Print the revision as json
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ChangeCommand {
+    /// Print the page token that lists the changes made from now on
+    StartToken {
+        /// Print the token as json
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List the changes made since a page token
+    List {
+        /// Page token from `changes start-token` or from a previous `changes list`
+        page_token: String,
+
+        /// Max changes to list
+        #[arg(long, default_value_t = 1000)]
+        max: usize,
+
+        /// Print the changes and the next page tokens as json
+        #[arg(long)]
+        json: bool,
+
+        /// Don't print header
+        #[arg(long)]
+        skip_header: bool,
+
+        /// Field separator
+        #[arg(long, default_value_t = String::from("\t"))]
+        field_separator: String,
     },
 }
 
@@ -375,6 +528,12 @@ enum PermissionCommand {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+
+    if let Some(account_name) = &cli.account {
+        // Read by `AppConfig::load_current_account`. Set before any other
+        // thread exists, so no reader races with the write.
+        std::env::set_var(app_config::ACCOUNT_ENV_VAR, account_name);
+    }
 
     match cli.command {
         Command::About => {
@@ -448,14 +607,16 @@ async fn main() {
                 FileCommand::Info {
                     file_id,
                     size_in_bytes,
+                    json,
                 } => {
                     // fmt
                     files::info(files::info::Config {
                         file_id,
                         size_in_bytes,
+                        json,
                     })
                     .await
-                    .unwrap_or_else(handle_error)
+                    .unwrap_or_else(handle_error_with_code)
                 }
 
                 FileCommand::List {
@@ -467,6 +628,7 @@ async fn main() {
                     skip_header,
                     full_name,
                     field_separator,
+                    json,
                 } => {
                     let parent_query =
                         parent.map(|folder_id| ListQuery::FilesInFolder { folder_id });
@@ -482,9 +644,10 @@ async fn main() {
                         skip_header,
                         truncate_name: !full_name,
                         field_separator,
+                        json,
                     })
                     .await
-                    .unwrap_or_else(handle_error)
+                    .unwrap_or_else(handle_error_with_code)
                 }
 
                 FileCommand::Download {
@@ -517,7 +680,7 @@ async fn main() {
                         destination: dst,
                     })
                     .await
-                    .unwrap_or_else(handle_error)
+                    .unwrap_or_else(handle_error_with_code)
                 }
 
                 FileCommand::Upload {
@@ -529,6 +692,8 @@ async fn main() {
                     print_chunk_errors,
                     print_chunk_info,
                     print_only_id,
+                    app_properties,
+                    json,
                 } => {
                     // fmt
                     files::upload(files::upload::Config {
@@ -540,9 +705,11 @@ async fn main() {
                         print_chunk_info,
                         upload_directories: recursive,
                         print_only_id,
+                        app_properties,
+                        json,
                     })
                     .await
-                    .unwrap_or_else(handle_error)
+                    .unwrap_or_else(handle_error_with_code)
                 }
 
                 FileCommand::Update {
@@ -552,6 +719,10 @@ async fn main() {
                     chunk_size,
                     print_chunk_errors,
                     print_chunk_info,
+                    keep_revision_forever,
+                    app_properties,
+                    if_md5,
+                    json,
                 } => {
                     // fmt
                     files::update(files::update::Config {
@@ -561,9 +732,13 @@ async fn main() {
                         chunk_size,
                         print_chunk_errors,
                         print_chunk_info,
+                        keep_revision_forever,
+                        app_properties,
+                        if_md5,
+                        json,
                     })
                     .await
-                    .unwrap_or_else(handle_error)
+                    .unwrap_or_else(handle_error_with_code)
                 }
 
                 FileCommand::Delete { file_id, recursive } => {
@@ -573,23 +748,27 @@ async fn main() {
                         delete_directories: recursive,
                     })
                     .await
-                    .unwrap_or_else(handle_error)
+                    .unwrap_or_else(handle_error_with_code)
                 }
 
                 FileCommand::Mkdir {
                     name,
                     parent,
                     print_only_id,
+                    json,
                 } => {
                     // fmt
-                    files::mkdir(files::mkdir::Config {
-                        id: None,
-                        name,
-                        parents: parent,
-                        print_only_id,
-                    })
+                    files::mkdir(
+                        files::mkdir::Config {
+                            id: None,
+                            name,
+                            parents: parent,
+                            print_only_id,
+                        },
+                        json,
+                    )
                     .await
-                    .unwrap_or_else(handle_error)
+                    .unwrap_or_else(handle_error_with_code)
                 }
 
                 FileCommand::Rename { file_id, name } => {
@@ -653,6 +832,89 @@ async fn main() {
                     .await
                     .unwrap_or_else(handle_error)
                 }
+
+                FileCommand::Revisions { command } => match command {
+                    RevisionCommand::List {
+                        file_id,
+                        json,
+                        skip_header,
+                        field_separator,
+                    } => revisions::list(revisions::list::Config {
+                        file_id,
+                        json,
+                        skip_header,
+                        field_separator,
+                    })
+                    .await
+                    .unwrap_or_else(handle_error_with_code),
+
+                    RevisionCommand::Download {
+                        file_id,
+                        revision_id,
+                        destination,
+                        overwrite,
+                        stdout,
+                    } => {
+                        // clap requires --destination unless --stdout is given.
+                        let destination = match destination {
+                            Some(path) if !stdout => revisions::download::Destination::File(path),
+                            _ => revisions::download::Destination::Stdout,
+                        };
+
+                        let existing_file_action = if overwrite {
+                            files::download::ExistingFileAction::Overwrite
+                        } else {
+                            files::download::ExistingFileAction::Abort
+                        };
+
+                        revisions::download(revisions::download::Config {
+                            file_id,
+                            revision_id,
+                            destination,
+                            existing_file_action,
+                        })
+                        .await
+                        .unwrap_or_else(handle_error_with_code)
+                    }
+
+                    RevisionCommand::Keep {
+                        file_id,
+                        revision_id,
+                        unset,
+                        json,
+                    } => revisions::keep(revisions::keep::Config {
+                        file_id,
+                        revision_id,
+                        keep_forever: !unset,
+                        json,
+                    })
+                    .await
+                    .unwrap_or_else(handle_error_with_code),
+                },
+
+                FileCommand::Changes { command } => match command {
+                    ChangeCommand::StartToken { json } => {
+                        changes::start_token(changes::start_token::Config { json })
+                            .await
+                            .unwrap_or_else(handle_error_with_code)
+                    }
+
+                    ChangeCommand::List {
+                        page_token,
+                        max,
+                        json,
+                        skip_header,
+                        field_separator,
+                    } => changes::list(changes::list::Config {
+                        page_token,
+                        max_changes: max,
+                        json,
+                        skip_header,
+                        field_separator,
+                    })
+                    .await
+                    .unwrap_or_else(handle_error_with_code),
+                },
             }
         }
 
@@ -720,4 +982,11 @@ async fn main() {
 fn handle_error(err: impl Error) {
     eprintln!("Error: {}", err);
     std::process::exit(1);
+}
+
+/// Like `handle_error`, but exits with a code that tells scripts what kind of
+/// failure happened. See `gdrive::common::exit_code`.
+fn handle_error_with_code<E: Error + ExitCode>(err: E) {
+    eprintln!("Error: {}", err);
+    std::process::exit(err.exit_code());
 }
